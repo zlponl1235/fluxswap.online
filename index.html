@@ -591,7 +591,7 @@
                 return null;
             }
 
-            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT (ВОЗВРАЩАЕМ ИСХОДНУЮ КОНФИГУРАЦИЮ) =====
+            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT (ИСПРАВЛЕНО) =====
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
                 closeModal(walletModal);
@@ -618,11 +618,11 @@
                     setStatus('Connecting to WalletConnect...', '');
                     isConnecting = true;
 
-                    // Возвращаем исходную конфигурацию без optionalChains
-                    // Все сети как обязательные – так работало ранее
+                    // Используем только Ethereum mainnet как обязательную, остальные как опциональные
                     wcProvider = await EthereumProvider.init({
                         projectId: PROJECT_ID,
-                        chains: [1, 56, 137, 42161], // Все сети сразу
+                        chains: [1], // Только Ethereum обязательна
+                        optionalChains: [56, 137, 42161], // BSC, Polygon, Arbitrum – опциональны
                         showQrModal: true,
                         methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign'],
                         events: ['chainChanged', 'accountsChanged'],
@@ -693,7 +693,7 @@
                     if (msg.includes('User rejected')) {
                         msg = 'User rejected the connection request.';
                     } else if (msg.includes('chains') || msg.includes('chain')) {
-                        msg = 'Trust Wallet may not support all requested networks simultaneously. Try connecting to a single network (e.g., Ethereum).';
+                        msg = 'Trust Wallet does not support all requested networks. Please try connecting with only Ethereum mainnet (we use it as mandatory, other chains optional).';
                     }
                     setStatus('Connection failed: ' + msg, 'err');
                     isConnecting = false;

@@ -187,7 +187,7 @@
         </div>
     </div>
 
-    <!-- Модалка выбора токенов (без изменений) -->
+    <!-- Модалка выбора токенов -->
     <div id="tokenModal" class="modal-overlay">
         <div class="modal">
             <h3>Select Token</h3>
@@ -199,8 +199,8 @@
 
     <!-- Подключаем библиотеки через CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
-    <!-- Используем другую CDN для WalletConnect, которая точно даёт UMD -->
-    <script src="https://unpkg.com/@walletconnect/ethereum-provider@2.10.6/dist/umd/index.min.js"></script>
+    <!-- Используем проверенную ссылку для WalletConnect -->
+    <script src="https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.11.2/dist/umd/index.min.js"></script>
 
     <script>
         (function() {
@@ -324,25 +324,62 @@
                 return map[tokenSymbol] || 18;
             }
 
-            // ===== КУРСЫ =====
+            // ===== ПОЛУЧЕНИЕ КУРСОВ ЧЕРЕЗ BINANCE (без CORS) =====
+            // Маппинг символов токенов на пары Binance (USDT-квотируемые)
+            const binanceSymbolMap = {
+                'ethereum': 'ETHUSDT',
+                'binancecoin': 'BNBUSDT',
+                'tether': 'USDTUSDT', // USDT/USDT = 1
+                'usd-coin': 'USDCUSDT',
+                'dai': 'DAIUSDT',
+                'chainlink': 'LINKUSDT',
+                'polygon': 'MATICUSDT',
+                'wbtc': 'BTCUSDT'  // WBTC привязан к BTC
+            };
+
+            // Кэш для цен в USD (по токену)
+            let priceCacheUSD = {};
+
+            async function fetchPriceUSD(tokenId) {
+                if (tokenId === 'tether') return 1; // USDT = 1 USD
+                if (tokenId === 'usd-coin') return 1; // USDC ~1 USD (приблизительно)
+                if (priceCacheUSD[tokenId] && (Date.now() - priceCacheUSD[tokenId].timestamp < 60000)) {
+                    return priceCacheUSD[tokenId].price;
+                }
+                const pair = binanceSymbolMap[tokenId];
+                if (!pair) return null;
+                try {
+                    const url = `https://api.binance.com/api/v3/ticker/price?symbol=${pair}`;
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    if (data.price) {
+                        const price = parseFloat(data.price);
+                        priceCacheUSD[tokenId] = { price, timestamp: Date.now() };
+                        return price;
+                    }
+                    return null;
+                } catch (e) {
+                    console.warn('Binance price fetch error:', e);
+                    return null;
+                }
+            }
+
             async function fetchRealRate(fromId, toId) {
                 const cacheKey = fromId + '-' + toId;
-                if (rateCache[cacheKey] && (Date.now() - rateCache[cacheKey].timestamp < 30000)) {
+                if (rateCache[cacheKey] && (Date.now() - rateCache[cacheKey].timestamp < 60000)) {
                     return rateCache[cacheKey].rate;
                 }
                 try {
-                    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${fromId},${toId}&vs_currencies=usd`;
-                    const response = await fetch(url);
-                    const data = await response.json();
-                    const fromPrice = data[fromId]?.usd;
-                    const toPrice = data[toId]?.usd;
+                    // Получаем цены в USD
+                    const fromPrice = await fetchPriceUSD(fromId);
+                    const toPrice = await fetchPriceUSD(toId);
                     if (!fromPrice || !toPrice) throw new Error('Price not found');
                     const rate = fromPrice / toPrice;
                     rateCache[cacheKey] = { rate: rate, timestamp: Date.now() };
                     return rate;
                 } catch (error) {
                     console.error('Error fetching rate:', error);
-                    return 1.2;
+                    return 1.2; // fallback
                 }
             }
 
@@ -419,8 +456,9 @@
                 } else {
                     outputAmount.value = '';
                 }
-                const fromPrice = await fetchRealRate(fromId, 'usd');
-                const toPrice = await fetchRealRate(toId, 'usd');
+                // USD оценки
+                const fromPrice = await fetchPriceUSD(fromId);
+                const toPrice = await fetchPriceUSD(toId);
                 document.getElementById('fromUsd').textContent = fromPrice ? '~$' + (inputVal * fromPrice).toFixed(2) : '~$0.00';
                 document.getElementById('toUsd').textContent = toPrice ? '~$' + (parseFloat(outputAmount.value || 0) * toPrice).toFixed(2) : '~$0.00';
                 if (isConnected) await updateBalances();
@@ -517,15 +555,12 @@
 
             // ===== ПОЛУЧЕНИЕ ПРОВАЙДЕРА WALLETCONNECT =====
             function getEthereumProvider() {
-                // Пробуем разные варианты, потому что UMD может экспортировать по-разному
                 if (window.ethereumProvider) return window.ethereumProvider;
                 if (window.WalletConnectProvider) return window.WalletConnectProvider;
                 if (window['@walletconnect/ethereum-provider']) return window['@walletconnect/ethereum-provider'];
-                // Проверяем, не является ли библиотека экспортированной как default
                 if (window['@walletconnect/ethereum-provider'] && window['@walletconnect/ethereum-provider'].default) {
                     return window['@walletconnect/ethereum-provider'].default;
                 }
-                // Если не нашли, пробуем проверить, есть ли глобальный объект с именем 'EthereumProvider'
                 if (window.EthereumProvider) return window.EthereumProvider;
                 return null;
             }
@@ -944,7 +979,6 @@
                 if (typeof ethers === 'undefined') {
                     setStatus('❌ ethers is not loaded', 'err');
                 }
-                // Проверяем наличие WalletConnect
                 const providerCheck = getEthereumProvider();
                 if (!providerCheck) {
                     setStatus('❌ WalletConnect library not loaded. Check CDN.', 'err');

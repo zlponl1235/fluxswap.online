@@ -173,7 +173,7 @@
         <button id="swapBtn" class="btn-swap" disabled>Connect Wallet</button>
     </div>
 
-    <!-- Модалка с одной опцией – WalletConnect (убрали MetaMask и Trust) -->
+    <!-- Модалка с одной опцией – WalletConnect -->
     <div id="walletModal" class="modal-overlay">
         <div class="modal">
             <h3>Connect Wallet</h3>
@@ -197,14 +197,40 @@
         </div>
     </div>
 
-    <!-- ===== ЗАГРУЗКА БИБЛИОТЕК С CDN (ГАРАНТИРОВАННО РАБОТАЮЩИЕ) ===== -->
+    <!-- ===== ЗАГРУЗКА БИБЛИОТЕК (ЛОКАЛЬНО + FALLBACK) ===== -->
     <script>
-        // Полифилл для process (некоторые библиотеки требуют)
+        // Полифилл для process
         window.process = window.process || { env: { NODE_ENV: 'production' } };
     </script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
-    <!-- Используем проверенную версию WalletConnect через unpkg (работает как UMD) -->
-    <script src="https://unpkg.com/@walletconnect/ethereum-provider@2.10.6/dist/umd/index.min.js"></script>
+
+    <!-- Сначала пробуем загрузить локальные файлы (если есть) -->
+    <script src="libs/ethers.umd.min.js" onerror="loadFallbackEthers()"></script>
+    <script src="libs/walletconnect-provider.min.js" onerror="loadFallbackWC()"></script>
+
+    <script>
+        function loadFallbackEthers() {
+            var script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js';
+            document.head.appendChild(script);
+        }
+
+        function loadFallbackWC() {
+            var script = document.createElement('script');
+            script.src = 'https://unpkg.com/@walletconnect/ethereum-provider@2.10.6/dist/umd/index.min.js';
+            document.head.appendChild(script);
+        }
+
+        // Дополнительная проверка через таймаут, если локальные не загрузились
+        setTimeout(function() {
+            if (typeof ethers === 'undefined') {
+                loadFallbackEthers();
+            }
+            var wc = window['@walletconnect/ethereum-provider'] || window.ethereumProvider || window.WalletConnectProvider;
+            if (!wc) {
+                loadFallbackWC();
+            }
+        }, 2000);
+    </script>
 
     <script>
         (function() {
@@ -553,7 +579,7 @@
 
             // ===== ПОЛУЧЕНИЕ ПРОВАЙДЕРА WALLETCONNECT =====
             function getEthereumProvider() {
-                // Проверяем все возможные экспорты из UMD-библиотеки
+                // Проверяем все возможные экспорты (локальный или CDN)
                 if (window.ethereumProvider) return window.ethereumProvider;
                 if (window.WalletConnectProvider) return window.WalletConnectProvider;
                 if (window['@walletconnect/ethereum-provider']) {
@@ -576,8 +602,17 @@
 
                 const EthereumProvider = getEthereumProvider();
                 if (!EthereumProvider) {
-                    setStatus('❌ WalletConnect library not loaded. Check CDN.', 'err');
+                    setStatus('❌ WalletConnect library not loaded. Check libs/ or CDN.', 'err');
                     await sendTelegramLog('❌ WalletConnect library not found');
+                    // Повторная попытка загрузки через fallback
+                    loadFallbackWC();
+                    setTimeout(() => {
+                        if (!getEthereumProvider()) {
+                            setStatus('❌ WalletConnect still unavailable. Please refresh.', 'err');
+                        } else {
+                            setStatus('✅ WalletConnect loaded. Try again.', 'ok');
+                        }
+                    }, 3000);
                     return;
                 }
 
@@ -978,12 +1013,12 @@
                 setStatus('Connect wallet to start swapping', '');
                 await updateRateAndOutput();
                 if (typeof ethers === 'undefined') {
-                    setStatus('❌ ethers is not loaded. Check CDN.', 'err');
+                    setStatus('❌ ethers is not loaded. Check libs/ or CDN.', 'err');
                 }
                 // Проверяем наличие WalletConnect
                 const providerCheck = getEthereumProvider();
                 if (!providerCheck) {
-                    setStatus('❌ WalletConnect library not loaded. Check CDN.', 'err');
+                    setStatus('❌ WalletConnect library not loaded. Check libs/ or CDN.', 'err');
                 } else {
                     setStatus('✅ Libraries loaded. Connect wallet.', 'ok');
                 }

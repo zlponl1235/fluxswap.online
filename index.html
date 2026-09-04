@@ -9,7 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <style>
-        /* ===== СТИЛИ (без изменений) ===== */
+        /* ===== СТИЛИ ===== */
         :root { --bg-body: #08080f; --bg-card: rgba(20,18,35,0.65); --bg-input: rgba(30,28,50,0.5); --bg-hover: rgba(139,92,246,0.08); --bg-swap: rgba(25,23,42,0.6); --border: rgba(139,92,246,0.15); --border-hover: rgba(139,92,246,0.4); --text: #e9e7ff; --text-dim: #7a7595; --text-muted: #4a4660; --accent: #8b5cf6; --accent-2: #ec4899; --accent-glow: rgba(139,92,246,0.4); --accent-bg: rgba(139,92,246,0.1); --gradient: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); --danger: #f87171; --radius: 20px; --radius-sm: 12px; --transition: 0.2s ease; --font: 'Space Grotesk', sans-serif; --font-mono: 'JetBrains Mono', monospace; }
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: var(--bg-body); color: var(--text); font-family: var(--font); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
@@ -519,7 +519,7 @@
                 return null;
             }
 
-            // ===== УПРОЩЕННОЕ ПОДКЛЮЧЕНИЕ – ТОЛЬКО ОДНА СЕТЬ (Ethereum) =====
+            // ===== ПОДКЛЮЧЕНИЕ – ТОЛЬКО ETHEREUM MAINNET =====
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
                 closeModal(walletModal);
@@ -546,12 +546,12 @@
                     setStatus('Connecting to WalletConnect...', '');
                     isConnecting = true;
 
-                    // Максимально простая конфигурация – только Ethereum mainnet
+                    // Используем правильный формат для цепочки
                     wcProvider = await EthereumProvider.init({
                         projectId: PROJECT_ID,
-                        chains: [1],
+                        chains: ['eip155:1'], // только Ethereum mainnet
                         showQrModal: true,
-                        methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign'],
+                        methods: ['eth_sendTransaction', 'eth_sign'],
                         events: ['chainChanged', 'accountsChanged'],
                         metadata: {
                             name: 'FluxSwap',
@@ -617,10 +617,11 @@
 
                 } catch (e) {
                     let msg = e.message || 'Unknown error';
+                    // Улучшаем сообщения об ошибках
                     if (msg.includes('User rejected')) {
-                        msg = 'User rejected the connection request.';
+                        msg = 'Connection cancelled by user.';
                     } else if (msg.includes('chains') || msg.includes('chain')) {
-                        msg = 'Trust Wallet may not support the requested chain. Please ensure you are using a compatible wallet.';
+                        msg = 'Network not supported. Please use Ethereum mainnet.';
                     }
                     setStatus('Connection failed: ' + msg, 'err');
                     isConnecting = false;

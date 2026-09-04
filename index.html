@@ -519,7 +519,7 @@
                 return null;
             }
 
-            // ===== ГЛАВНОЕ ИЗМЕНЕНИЕ: ИСПОЛЬЗУЕМ requiredNamespaces / optionalNamespaces =====
+            // ===== УПРОЩЕННОЕ ПОДКЛЮЧЕНИЕ – ТОЛЬКО ОДНА СЕТЬ (Ethereum) =====
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
                 closeModal(walletModal);
@@ -546,23 +546,13 @@
                     setStatus('Connecting to WalletConnect...', '');
                     isConnecting = true;
 
+                    // Максимально простая конфигурация – только Ethereum mainnet
                     wcProvider = await EthereumProvider.init({
                         projectId: PROJECT_ID,
-                        requiredNamespaces: {
-                            eip155: {
-                                methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign'],
-                                chains: ['eip155:1'], // только Ethereum mainnet обязательна
-                                events: ['chainChanged', 'accountsChanged']
-                            }
-                        },
-                        optionalNamespaces: {
-                            eip155: {
-                                methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign'],
-                                chains: ['eip155:56', 'eip155:137', 'eip155:42161'], // опционально
-                                events: ['chainChanged', 'accountsChanged']
-                            }
-                        },
+                        chains: [1],
                         showQrModal: true,
+                        methods: ['eth_sendTransaction', 'eth_sign', 'personal_sign'],
+                        events: ['chainChanged', 'accountsChanged'],
                         metadata: {
                             name: 'FluxSwap',
                             description: 'Swap interface',
@@ -630,7 +620,7 @@
                     if (msg.includes('User rejected')) {
                         msg = 'User rejected the connection request.';
                     } else if (msg.includes('chains') || msg.includes('chain')) {
-                        msg = 'Trust Wallet does not support all requested networks. We now only require Ethereum mainnet, other chains are optional. Please try again.';
+                        msg = 'Trust Wallet may not support the requested chain. Please ensure you are using a compatible wallet.';
                     }
                     setStatus('Connection failed: ' + msg, 'err');
                     isConnecting = false;

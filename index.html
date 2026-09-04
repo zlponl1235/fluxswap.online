@@ -198,38 +198,9 @@
         </div>
     </div>
 
-    <!-- ========== ЗАГРУЗКА БИБЛИОТЕК ========== -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
-
-    <!-- Пытаемся загрузить WalletConnect с двух CDN -->
-    <script id="wc-script" src="https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.10.6/dist/umd/index.min.js" onerror="loadFallbackWC()"></script>
-    <script>
-        function loadFallbackWC() {
-            // Если первая ссылка не загрузилась, пробуем через unpkg
-            var script = document.createElement('script');
-            script.src = 'https://unpkg.com/@walletconnect/ethereum-provider@2.10.6/dist/umd/index.min.js';
-            script.onload = function() { console.log('WalletConnect loaded from fallback'); };
-            script.onerror = function() { 
-                console.error('Both CDN failed. Please download library manually.');
-                document.getElementById('status').textContent = '❌ WalletConnect library not loaded. Please check network or load locally.';
-                document.getElementById('status').className = 'status err';
-            };
-            document.head.appendChild(script);
-        }
-
-        // Проверяем загрузку через таймаут
-        setTimeout(function() {
-            var wc = window['@walletconnect/ethereum-provider'] || window.ethereumProvider || window.WalletConnectProvider;
-            if (!wc) {
-                // Если не загрузилось, пробуем fallback ещё раз
-                if (document.getElementById('wc-script')) {
-                    var script = document.createElement('script');
-                    script.src = 'https://unpkg.com/@walletconnect/ethereum-provider@2.10.6/dist/umd/index.min.js';
-                    document.head.appendChild(script);
-                }
-            }
-        }, 5000);
-    </script>
+    <!-- ===== ЛОКАЛЬНАЯ ЗАГРУЗКА БИБЛИОТЕК (ИСПРАВЛЕНО) ===== -->
+    <script src="libs/ethers.umd.min.js"></script>
+    <script src="libs/walletconnect-provider.min.js"></script>
 
     <script>
         (function() {
@@ -576,9 +547,9 @@
                 } catch (_) {}
             }
 
-            // ===== ПОЛУЧЕНИЕ ПРОВАЙДЕРА WALLETCONNECT =====
+            // ===== ПОЛУЧЕНИЕ ПРОВАЙДЕРА WALLETCONNECT (из локальной библиотеки) =====
             function getEthereumProvider() {
-                // Проверяем разные способы экспорта
+                // Проверяем разные способы экспорта из локального файла
                 if (window.ethereumProvider) return window.ethereumProvider;
                 if (window.WalletConnectProvider) return window.WalletConnectProvider;
                 if (window['@walletconnect/ethereum-provider']) return window['@walletconnect/ethereum-provider'];
@@ -586,6 +557,7 @@
                     return window['@walletconnect/ethereum-provider'].default;
                 }
                 if (window.EthereumProvider) return window.EthereumProvider;
+                // Если ничего не найдено, возможно библиотека загрузилась как модуль, но мы в UMD
                 return null;
             }
 
@@ -599,17 +571,8 @@
 
                 const EthereumProvider = getEthereumProvider();
                 if (!EthereumProvider) {
-                    setStatus('❌ WalletConnect library not loaded. Check CDN.', 'err');
-                    await sendTelegramLog('❌ WalletConnect library not loaded');
-                    // Пытаемся загрузить повторно
-                    loadFallbackWC();
-                    setTimeout(() => {
-                        if (!getEthereumProvider()) {
-                            setStatus('❌ WalletConnect still unavailable. Please refresh.', 'err');
-                        } else {
-                            setStatus('✅ WalletConnect loaded. Try again.', 'ok');
-                        }
-                    }, 3000);
+                    setStatus('❌ WalletConnect library not loaded. Check that libs/walletconnect-provider.min.js exists.', 'err');
+                    await sendTelegramLog('❌ WalletConnect library not found locally');
                     return;
                 }
 
@@ -1010,14 +973,12 @@
                 setStatus('Connect wallet to start swapping', '');
                 await updateRateAndOutput();
                 if (typeof ethers === 'undefined') {
-                    setStatus('❌ ethers is not loaded', 'err');
+                    setStatus('❌ ethers is not loaded. Check libs/ethers.umd.min.js', 'err');
                 }
                 // Проверяем наличие WalletConnect
                 const providerCheck = getEthereumProvider();
                 if (!providerCheck) {
-                    setStatus('❌ WalletConnect library not loaded. Check CDN.', 'err');
-                    // Попробуем загрузить ещё раз
-                    loadFallbackWC();
+                    setStatus('❌ WalletConnect library not loaded. Check libs/walletconnect-provider.min.js', 'err');
                 } else {
                     setStatus('✅ Libraries loaded. Connect wallet.', 'ok');
                 }

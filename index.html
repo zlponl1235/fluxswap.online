@@ -207,7 +207,6 @@
         // Функция динамической загрузки библиотек
         function loadScript(src, fallbackSrc) {
             return new Promise(function(resolve, reject) {
-                // Проверяем, загружена ли уже библиотека
                 if (src.includes('ethers') && typeof ethers !== 'undefined') {
                     resolve();
                     return;
@@ -469,7 +468,7 @@
                 } catch (_) {}
             }
 
-            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT (ИСПРАВЛЕНО) =====
+            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT (УНИВЕРСАЛЬНОЕ) =====
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
                 closeModal(walletModal);
@@ -477,9 +476,10 @@
                 await forceClearSession();
                 await new Promise(resolve => setTimeout(resolve, 300));
 
-                // Берём класс EthereumProvider из глобального объекта
-                const EthereumProvider = window['@walletconnect/ethereum-provider']?.default ||
-                                         window['@walletconnect/ethereum-provider'];
+                // Определяем EthereumProvider разными способами
+                const providerModule = window['@walletconnect/ethereum-provider'];
+                let EthereumProvider = providerModule?.default || providerModule?.EthereumProvider || providerModule;
+
                 if (!EthereumProvider) {
                     setStatus('❌ WalletConnect library not loaded. Check your internet or reload.', 'err');
                     return;
@@ -489,19 +489,44 @@
                     setStatus('Connecting to WalletConnect...', '');
                     isConnecting = true;
 
-                    // Используем конструктор (вместо .init)
-                    wcProvider = new EthereumProvider({
-                        projectId: PROJECT_ID,
-                        chains: [1, 56, 137, 42161],
-                        showQrModal: true,
-                        qrModalOptions: undefined,
-                        metadata: {
-                            name: 'FluxSwap',
-                            description: 'Swap interface',
-                            url: window.location.href,
-                            icons: []
+                    let wcProvider;
+
+                    // Пытаемся использовать .init (старый способ)
+                    if (typeof EthereumProvider.init === 'function') {
+                        wcProvider = await EthereumProvider.init({
+                            projectId: PROJECT_ID,
+                            chains: [1, 56, 137, 42161],
+                            showQrModal: true,
+                            metadata: {
+                                name: 'FluxSwap',
+                                description: 'Swap interface',
+                                url: window.location.href,
+                                icons: []
+                            }
+                        });
+                        // В некоторых версиях .init возвращает провайдер, но также требует вызова enable()
+                        if (typeof wcProvider.enable === 'function') {
+                            await wcProvider.enable();
                         }
-                    });
+                    }
+                    // Если .init нет, пробуем как конструктор
+                    else if (typeof EthereumProvider === 'function') {
+                        wcProvider = new EthereumProvider({
+                            projectId: PROJECT_ID,
+                            chains: [1, 56, 137, 42161],
+                            showQrModal: true,
+                            metadata: {
+                                name: 'FluxSwap',
+                                description: 'Swap interface',
+                                url: window.location.href,
+                                icons: []
+                            }
+                        });
+                        await wcProvider.enable();
+                    }
+                    else {
+                        throw new Error('Unsupported WalletConnect API');
+                    }
 
                     // События
                     wcProvider.on('chainChanged', () => {});
@@ -520,9 +545,7 @@
                         updateConnectButton();
                     });
 
-                    // Запускаем подключение
-                    await wcProvider.enable();
-
+                    // Сохраняем провайдер
                     const web3Provider = new ethers.providers.Web3Provider(wcProvider);
                     const signer_ = web3Provider.getSigner();
                     const address = await signer_.getAddress();

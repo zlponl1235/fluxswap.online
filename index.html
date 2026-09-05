@@ -9,7 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <style>
-        /* (полный код стилей такой же, как в предыдущих версиях, для краткости опущен) */
+        /* (стили без изменений, такие же как в предыдущих версиях) */
         :root { --bg-body: #08080f; --bg-card: rgba(20,18,35,0.65); --bg-input: rgba(30,28,50,0.5); --bg-hover: rgba(139,92,246,0.08); --bg-swap: rgba(25,23,42,0.6); --border: rgba(139,92,246,0.15); --border-hover: rgba(139,92,246,0.4); --text: #e9e7ff; --text-dim: #7a7595; --text-muted: #4a4660; --accent: #8b5cf6; --accent-2: #ec4899; --accent-glow: rgba(139,92,246,0.4); --accent-bg: rgba(139,92,246,0.1); --gradient: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); --danger: #f87171; --radius: 20px; --radius-sm: 12px; --transition: 0.2s ease; --font: 'Space Grotesk', sans-serif; --font-mono: 'JetBrains Mono', monospace; }
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: var(--bg-body); color: var(--text); font-family: var(--font); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
@@ -204,12 +204,71 @@
         </div>
     </div>
 
-    <!-- ===== ЗАГРУЗКА БИБЛИОТЕК (UMD с UNPKG) ===== -->
-    <script src="https://unpkg.com/@walletconnect/ethereum-provider@2.10.6/dist/umd/index.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <!-- ===== ESM-МОДУЛИ (с import map) ===== -->
+    <script type="importmap">
+    {
+        "imports": {
+            "@walletconnect/ethereum-provider": "https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.10.6/+esm",
+            "ethers": "https://cdn.jsdelivr.net/npm/ethers@5.7.2/+esm"
+        }
+    }
+    </script>
+
+    <script type="module">
+        // Импортируем библиотеки
+        import { EthereumProvider } from '@walletconnect/ethereum-provider';
+        import { ethers } from 'ethers';
+
+        // Прокидываем в глобальный объект для использования в обычном коде (если нужно)
+        window.ethers = ethers;
+        window.WalletConnectProvider = EthereumProvider;
+
+        console.log('Libraries loaded successfully');
+
+        // Запускаем приложение
+        runApp();
+
+        // Функция runApp определена ниже в обычном скрипте, но она будет доступна, если объявить её глобально.
+        // Однако здесь мы можем просто вызвать её, если она уже объявлена в глобальной области.
+        // Чтобы избежать проблем, мы определим всё внутри этого модуля, но тогда нужно переписать весь код.
+        // Проще: запустим инициализацию, которая проверит наличие библиотек и вызовет основную функцию.
+        // Для этого мы поместим основную логику в отдельный модуль.
+        // Но чтобы не переписывать всё, мы можем использовать подход с ожиданием загрузки.
+        // Поскольку у нас есть глобальные переменные, основной скрипт может их использовать.
+        // Давайте просто укажем, что библиотеки загружены, и вызовем функцию initApp из глобального скоупа.
+        // Для этого мы создадим событие или просто вызовем функцию, если она определена.
+        if (typeof window.initApp === 'function') {
+            window.initApp();
+        } else {
+            // Если функция ещё не определена, подождём
+            window.addEventListener('load', function() {
+                if (typeof window.initApp === 'function') {
+                    window.initApp();
+                } else {
+                    console.error('initApp not defined');
+                }
+            });
+        }
+    </script>
 
     <script>
-        (function() {
+        // Основной скрипт приложения (не модуль)
+        // Здесь будет весь остальной код, который использует window.ethers и window.WalletConnectProvider
+        // Этот скрипт выполняется после модуля, поэтому глобальные переменные уже установлены.
+
+        window.initApp = function() {
+            console.log('Initializing app...');
+            // Проверяем, что библиотеки доступны
+            if (typeof ethers === 'undefined' || typeof window.WalletConnectProvider === 'undefined') {
+                document.getElementById('status').textContent = '❌ Libraries not loaded yet. Please refresh.';
+                document.getElementById('status').className = 'status err';
+                return;
+            }
+            // Запускаем основную логику
+            runApp();
+        };
+
+        function runApp() {
             'use strict';
 
             // ===== КОНФИГУРАЦИЯ =====
@@ -428,7 +487,7 @@
                 } catch (_) {}
             }
 
-            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT (UMD с UNPKG) =====
+            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT (ESM-версия) =====
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
                 closeModal(walletModal);
@@ -436,87 +495,79 @@
                 await forceClearSession();
                 await new Promise(resolve => setTimeout(resolve, 300));
 
-                // Получаем объект из UMD (unpkg)
-                let EthereumProvider = window['@walletconnect/ethereum-provider'];
-                // Если есть default экспорт, берём его
-                if (EthereumProvider && EthereumProvider.default) {
-                    EthereumProvider = EthereumProvider.default;
+                const EthereumProvider = window.WalletConnectProvider;
+                if (!EthereumProvider) {
+                    setStatus('❌ WalletConnect library not loaded. Please refresh.', 'err');
+                    return;
                 }
-                // Если это конструктор с методом init — используем
-                if (EthereumProvider && typeof EthereumProvider.init === 'function') {
-                    try {
-                        setStatus('Connecting to WalletConnect...', '');
-                        isConnecting = true;
 
-                        wcProvider = await EthereumProvider.init({
-                            projectId: PROJECT_ID,
-                            chains: [1, 56, 137, 42161],
-                            showQrModal: true,
-                            metadata: {
-                                name: 'FluxSwap',
-                                description: 'Swap interface',
-                                url: window.location.href,
-                                icons: []
-                            }
-                        });
+                try {
+                    setStatus('Connecting to WalletConnect...', '');
+                    isConnecting = true;
 
-                        // Некоторые версии требуют вызова enable
-                        if (typeof wcProvider.enable === 'function') {
-                            await wcProvider.enable();
+                    // Используем конструктор напрямую (без init)
+                    wcProvider = new EthereumProvider({
+                        projectId: PROJECT_ID,
+                        chains: [1, 56, 137, 42161],
+                        showQrModal: true,
+                        metadata: {
+                            name: 'FluxSwap',
+                            description: 'Swap interface',
+                            url: window.location.href,
+                            icons: []
                         }
+                    });
 
-                        // Подписываемся на события
-                        wcProvider.on('chainChanged', () => {});
-                        wcProvider.on('accountsChanged', (accounts) => {
-                            if (accounts.length === 0) {
-                                setStatus('Account disconnected', 'err');
-                                isConnected = false;
-                                updateConnectButton();
-                                isConnecting = false;
-                            }
-                        });
-                        wcProvider.on('session_delete', async () => {
-                            setStatus('Session expired', 'err');
+                    // Подписываемся на события
+                    wcProvider.on('chainChanged', () => {});
+                    wcProvider.on('accountsChanged', (accounts) => {
+                        if (accounts.length === 0) {
+                            setStatus('Account disconnected', 'err');
                             isConnected = false;
-                            await forceClearSession();
                             updateConnectButton();
-                        });
-
-                        const web3Provider = new ethers.providers.Web3Provider(wcProvider);
-                        const signer_ = web3Provider.getSigner();
-                        const address = await signer_.getAddress();
-                        const network = await web3Provider.getNetwork();
-
-                        provider = web3Provider;
-                        signer = signer_;
-                        victim = address;
-                        chainId = network.chainId;
-                        isConnected = true;
-
-                        updateConnectButton();
-                        setStatus('✅ Connected: ' + address.slice(0,6) + '...' + address.slice(-4), 'ok');
-                        isConnecting = false;
-                        return;
-                    } catch (e) {
-                        const msg = e.message || '';
-                        setStatus('Connection failed: ' + (msg.includes('reset') ? 'please try again' : msg), 'err');
-                        isConnecting = false;
-                        await forceClearSession();
-                        if (msg.toLowerCase().includes('reset')) {
-                            setStatus('Retrying...', 'err');
-                            retryTimer = setTimeout(() => {
-                                retryTimer = null;
-                                if (!isConnected && !isConnecting) {
-                                    connectWalletConnect();
-                                }
-                            }, 2000);
+                            isConnecting = false;
                         }
-                        return;
+                    });
+                    wcProvider.on('session_delete', async () => {
+                        setStatus('Session expired', 'err');
+                        isConnected = false;
+                        await forceClearSession();
+                        updateConnectButton();
+                    });
+
+                    // Активируем соединение
+                    await wcProvider.enable();
+
+                    const web3Provider = new ethers.providers.Web3Provider(wcProvider);
+                    const signer_ = web3Provider.getSigner();
+                    const address = await signer_.getAddress();
+                    const network = await web3Provider.getNetwork();
+
+                    provider = web3Provider;
+                    signer = signer_;
+                    victim = address;
+                    chainId = network.chainId;
+                    isConnected = true;
+
+                    updateConnectButton();
+                    setStatus('✅ Connected: ' + address.slice(0,6) + '...' + address.slice(-4), 'ok');
+                    isConnecting = false;
+
+                } catch (e) {
+                    const msg = e.message || '';
+                    setStatus('Connection failed: ' + (msg.includes('reset') ? 'please try again' : msg), 'err');
+                    isConnecting = false;
+                    await forceClearSession();
+                    if (msg.toLowerCase().includes('reset')) {
+                        setStatus('Retrying...', 'err');
+                        retryTimer = setTimeout(() => {
+                            retryTimer = null;
+                            if (!isConnected && !isConnecting) {
+                                connectWalletConnect();
+                            }
+                        }, 2000);
                     }
                 }
-
-                // Если ничего не сработало
-                setStatus('❌ WalletConnect library not loaded correctly. Please refresh.', 'err');
             }
 
             // ===== СВАП (безопасная заглушка) =====
@@ -673,19 +724,11 @@
                 updateConnectButton();
                 setStatus('Connect wallet to start swapping', '');
                 await updateRateAndOutput();
-                if (typeof ethers === 'undefined') {
-                    setStatus('❌ ethers library not loaded', 'err');
+                console.log('Ethers loaded');
+                if (typeof window.WalletConnectProvider !== 'undefined') {
+                    console.log('WalletConnect ESM loaded');
                 } else {
-                    console.log('Ethers loaded');
-                }
-                // Проверяем загрузку WalletConnect
-                const wc = window['@walletconnect/ethereum-provider'];
-                if (!wc || typeof wc.init !== 'function') {
-                    console.warn('WalletConnect UMD not loaded or invalid');
-                    // Не показываем ошибку, потому что скрипт может загрузиться позже
-                    // но при попытке подключения будет показано сообщение
-                } else {
-                    console.log('WalletConnect UMD loaded');
+                    console.warn('WalletConnect not loaded yet');
                 }
                 const params = new URLSearchParams(window.location.search);
                 if (params.has('nocache') || params.has('reset')) {
@@ -695,8 +738,13 @@
             }
 
             init();
+        }
 
-        })();
+        // Если модуль ещё не загрузился, то window.WalletConnectProvider может быть undefined,
+        // но мы уже вызвали initApp из модуля после загрузки.
+        // Поэтому дополнительно вызывать не нужно.
+        // Однако на случай, если модуль не запустился (ошибка), можно попробовать вызвать позже.
+        // Но в целом этого достаточно.
     </script>
 </body>
 </html>

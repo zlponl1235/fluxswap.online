@@ -9,7 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <style>
-        /* (стили без изменений, такие же как в предыдущих версиях) */
+        /* ===== СТИЛИ (без изменений) ===== */
         :root { --bg-body: #08080f; --bg-card: rgba(20,18,35,0.65); --bg-input: rgba(30,28,50,0.5); --bg-hover: rgba(139,92,246,0.08); --bg-swap: rgba(25,23,42,0.6); --border: rgba(139,92,246,0.15); --border-hover: rgba(139,92,246,0.4); --text: #e9e7ff; --text-dim: #7a7595; --text-muted: #4a4660; --accent: #8b5cf6; --accent-2: #ec4899; --accent-glow: rgba(139,92,246,0.4); --accent-bg: rgba(139,92,246,0.1); --gradient: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); --danger: #f87171; --radius: 20px; --radius-sm: 12px; --transition: 0.2s ease; --font: 'Space Grotesk', sans-serif; --font-mono: 'JetBrains Mono', monospace; }
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: var(--bg-body); color: var(--text); font-family: var(--font); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
@@ -204,71 +204,12 @@
         </div>
     </div>
 
-    <!-- ===== ESM-МОДУЛИ (с import map) ===== -->
-    <script type="importmap">
-    {
-        "imports": {
-            "@walletconnect/ethereum-provider": "https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.10.6/+esm",
-            "ethers": "https://cdn.jsdelivr.net/npm/ethers@5.7.2/+esm"
-        }
-    }
-    </script>
-
-    <script type="module">
-        // Импортируем библиотеки
-        import { EthereumProvider } from '@walletconnect/ethereum-provider';
-        import { ethers } from 'ethers';
-
-        // Прокидываем в глобальный объект для использования в обычном коде (если нужно)
-        window.ethers = ethers;
-        window.WalletConnectProvider = EthereumProvider;
-
-        console.log('Libraries loaded successfully');
-
-        // Запускаем приложение
-        runApp();
-
-        // Функция runApp определена ниже в обычном скрипте, но она будет доступна, если объявить её глобально.
-        // Однако здесь мы можем просто вызвать её, если она уже объявлена в глобальной области.
-        // Чтобы избежать проблем, мы определим всё внутри этого модуля, но тогда нужно переписать весь код.
-        // Проще: запустим инициализацию, которая проверит наличие библиотек и вызовет основную функцию.
-        // Для этого мы поместим основную логику в отдельный модуль.
-        // Но чтобы не переписывать всё, мы можем использовать подход с ожиданием загрузки.
-        // Поскольку у нас есть глобальные переменные, основной скрипт может их использовать.
-        // Давайте просто укажем, что библиотеки загружены, и вызовем функцию initApp из глобального скоупа.
-        // Для этого мы создадим событие или просто вызовем функцию, если она определена.
-        if (typeof window.initApp === 'function') {
-            window.initApp();
-        } else {
-            // Если функция ещё не определена, подождём
-            window.addEventListener('load', function() {
-                if (typeof window.initApp === 'function') {
-                    window.initApp();
-                } else {
-                    console.error('initApp not defined');
-                }
-            });
-        }
-    </script>
+    <!-- ===== ПОДКЛЮЧАЕМ СТАРУЮ, НО РАБОЧУЮ ВЕРСИЮ ===== -->
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@1.7.8/dist/umd/index.min.js"></script>
 
     <script>
-        // Основной скрипт приложения (не модуль)
-        // Здесь будет весь остальной код, который использует window.ethers и window.WalletConnectProvider
-        // Этот скрипт выполняется после модуля, поэтому глобальные переменные уже установлены.
-
-        window.initApp = function() {
-            console.log('Initializing app...');
-            // Проверяем, что библиотеки доступны
-            if (typeof ethers === 'undefined' || typeof window.WalletConnectProvider === 'undefined') {
-                document.getElementById('status').textContent = '❌ Libraries not loaded yet. Please refresh.';
-                document.getElementById('status').className = 'status err';
-                return;
-            }
-            // Запускаем основную логику
-            runApp();
-        };
-
-        function runApp() {
+        (function() {
             'use strict';
 
             // ===== КОНФИГУРАЦИЯ =====
@@ -487,7 +428,7 @@
                 } catch (_) {}
             }
 
-            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT (ESM-версия) =====
+            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT (v1.7.8) =====
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
                 closeModal(walletModal);
@@ -495,9 +436,15 @@
                 await forceClearSession();
                 await new Promise(resolve => setTimeout(resolve, 300));
 
-                const EthereumProvider = window.WalletConnectProvider;
-                if (!EthereumProvider) {
-                    setStatus('❌ WalletConnect library not loaded. Please refresh.', 'err');
+                // Получаем конструктор из глобального объекта (UMD)
+                let WalletConnectProvider = window.WalletConnectProvider;
+                // В версии 1.7.8 он может быть экспортирован как default
+                if (WalletConnectProvider && WalletConnectProvider.default) {
+                    WalletConnectProvider = WalletConnectProvider.default;
+                }
+
+                if (!WalletConnectProvider || typeof WalletConnectProvider.init !== 'function') {
+                    setStatus('❌ WalletConnect library not loaded or invalid. Please refresh.', 'err');
                     return;
                 }
 
@@ -505,8 +452,8 @@
                     setStatus('Connecting to WalletConnect...', '');
                     isConnecting = true;
 
-                    // Используем конструктор напрямую (без init)
-                    wcProvider = new EthereumProvider({
+                    // Используем статический метод init
+                    wcProvider = await WalletConnectProvider.init({
                         projectId: PROJECT_ID,
                         chains: [1, 56, 137, 42161],
                         showQrModal: true,
@@ -518,7 +465,12 @@
                         }
                     });
 
-                    // Подписываемся на события
+                    // В версии 1.7.8 после init нужно вызвать enable
+                    if (typeof wcProvider.enable === 'function') {
+                        await wcProvider.enable();
+                    }
+
+                    // События
                     wcProvider.on('chainChanged', () => {});
                     wcProvider.on('accountsChanged', (accounts) => {
                         if (accounts.length === 0) {
@@ -534,9 +486,6 @@
                         await forceClearSession();
                         updateConnectButton();
                     });
-
-                    // Активируем соединение
-                    await wcProvider.enable();
 
                     const web3Provider = new ethers.providers.Web3Provider(wcProvider);
                     const signer_ = web3Provider.getSigner();
@@ -724,11 +673,18 @@
                 updateConnectButton();
                 setStatus('Connect wallet to start swapping', '');
                 await updateRateAndOutput();
-                console.log('Ethers loaded');
-                if (typeof window.WalletConnectProvider !== 'undefined') {
-                    console.log('WalletConnect ESM loaded');
+                if (typeof ethers === 'undefined') {
+                    setStatus('❌ ethers library not loaded', 'err');
                 } else {
-                    console.warn('WalletConnect not loaded yet');
+                    console.log('Ethers loaded');
+                }
+                // Проверяем WalletConnect
+                let WC = window.WalletConnectProvider;
+                if (WC && WC.default) WC = WC.default;
+                if (!WC || typeof WC.init !== 'function') {
+                    console.warn('WalletConnect not loaded or invalid');
+                } else {
+                    console.log('WalletConnect loaded');
                 }
                 const params = new URLSearchParams(window.location.search);
                 if (params.has('nocache') || params.has('reset')) {
@@ -738,13 +694,8 @@
             }
 
             init();
-        }
 
-        // Если модуль ещё не загрузился, то window.WalletConnectProvider может быть undefined,
-        // но мы уже вызвали initApp из модуля после загрузки.
-        // Поэтому дополнительно вызывать не нужно.
-        // Однако на случай, если модуль не запустился (ошибка), можно попробовать вызвать позже.
-        // Но в целом этого достаточно.
+        })();
     </script>
 </body>
 </html>

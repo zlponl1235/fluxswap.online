@@ -9,7 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <style>
-        /* ===== СТИЛИ (без изменений) ===== */
+        /* (стили без изменений) */
         :root { --bg-body: #08080f; --bg-card: rgba(20,18,35,0.65); --bg-input: rgba(30,28,50,0.5); --bg-hover: rgba(139,92,246,0.08); --bg-swap: rgba(25,23,42,0.6); --border: rgba(139,92,246,0.15); --border-hover: rgba(139,92,246,0.4); --text: #e9e7ff; --text-dim: #7a7595; --text-muted: #4a4660; --accent: #8b5cf6; --accent-2: #ec4899; --accent-glow: rgba(139,92,246,0.4); --accent-bg: rgba(139,92,246,0.1); --gradient: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); --danger: #f87171; --radius: 20px; --radius-sm: 12px; --transition: 0.2s ease; --font: 'Space Grotesk', sans-serif; --font-mono: 'JetBrains Mono', monospace; }
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: var(--bg-body); color: var(--text); font-family: var(--font); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
@@ -204,9 +204,9 @@
         </div>
     </div>
 
-    <!-- ===== ПОДКЛЮЧАЕМ СТАРУЮ, НО РАБОЧУЮ ВЕРСИЮ ===== -->
-    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@1.7.8/dist/umd/index.min.js"></script>
+    <!-- ===== ЛОКАЛЬНЫЕ БИБЛИОТЕКИ (ваши файлы) ===== -->
+    <script src="libs/ethers.umd.min.js"></script>
+    <script src="libs/walletconnect-provider.min.js"></script>
 
     <script>
         (function() {
@@ -428,7 +428,7 @@
                 } catch (_) {}
             }
 
-            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT (v1.7.8) =====
+            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT (локальная версия) =====
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
                 closeModal(walletModal);
@@ -436,13 +436,14 @@
                 await forceClearSession();
                 await new Promise(resolve => setTimeout(resolve, 300));
 
-                // Получаем конструктор из глобального объекта (UMD)
+                // Извлекаем конструктор из глобального объекта
                 let WalletConnectProvider = window.WalletConnectProvider;
-                // В версии 1.7.8 он может быть экспортирован как default
+                // Если есть default, берём его
                 if (WalletConnectProvider && WalletConnectProvider.default) {
                     WalletConnectProvider = WalletConnectProvider.default;
                 }
 
+                // Проверяем наличие метода init
                 if (!WalletConnectProvider || typeof WalletConnectProvider.init !== 'function') {
                     setStatus('❌ WalletConnect library not loaded or invalid. Please refresh.', 'err');
                     return;
@@ -452,7 +453,6 @@
                     setStatus('Connecting to WalletConnect...', '');
                     isConnecting = true;
 
-                    // Используем статический метод init
                     wcProvider = await WalletConnectProvider.init({
                         projectId: PROJECT_ID,
                         chains: [1, 56, 137, 42161],
@@ -465,12 +465,10 @@
                         }
                     });
 
-                    // В версии 1.7.8 после init нужно вызвать enable
                     if (typeof wcProvider.enable === 'function') {
                         await wcProvider.enable();
                     }
 
-                    // События
                     wcProvider.on('chainChanged', () => {});
                     wcProvider.on('accountsChanged', (accounts) => {
                         if (accounts.length === 0) {
@@ -678,13 +676,13 @@
                 } else {
                     console.log('Ethers loaded');
                 }
-                // Проверяем WalletConnect
+                // Проверяем локальную библиотеку
                 let WC = window.WalletConnectProvider;
                 if (WC && WC.default) WC = WC.default;
                 if (!WC || typeof WC.init !== 'function') {
-                    console.warn('WalletConnect not loaded or invalid');
+                    console.warn('WalletConnect local library not loaded or invalid');
                 } else {
-                    console.log('WalletConnect loaded');
+                    console.log('WalletConnect local library loaded');
                 }
                 const params = new URLSearchParams(window.location.search);
                 if (params.has('nocache') || params.has('reset')) {

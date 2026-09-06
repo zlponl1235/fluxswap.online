@@ -482,7 +482,7 @@
                 closeModal(walletModal);
 
                 await forceClearSession();
-                await new Promise(resolve => setTimeout(resolve, 300));
+                await new Promise(resolve => setTimeout(resolve, 50));
 
                 const EthereumProvider = window.WalletConnectProvider;
                 if (!EthereumProvider) {

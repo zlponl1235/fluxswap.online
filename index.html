@@ -476,7 +476,7 @@
                 } catch (_) {}
             }
 
-            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT (v2 через ESM) =====
+            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT (v2 через ESM с .init()) =====
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
                 closeModal(walletModal);
@@ -484,7 +484,6 @@
                 await forceClearSession();
                 await new Promise(resolve => setTimeout(resolve, 300));
 
-                // Берем конструктор из глобальной переменной (установлен модулем)
                 const EthereumProvider = window.WalletConnectProvider;
                 if (!EthereumProvider) {
                     setStatus('❌ WalletConnect library not loaded. Please refresh.', 'err');
@@ -495,11 +494,11 @@
                     setStatus('Connecting to WalletConnect...', '');
                     isConnecting = true;
 
-                    // В v2 используется конструктор, а не init
-                    wcProvider = new EthereumProvider({
+                    // Используем статический метод .init() (правильно для этой версии)
+                    wcProvider = await EthereumProvider.init({
                         projectId: PROJECT_ID,
-                        optionalChains: [1, 56, 137, 42161],  // Заменяем chains на optionalChains
-                        showQrModal: true,  // В v2.10.6 showQrModal всё ещё работает
+                        optionalChains: [1, 56, 137, 42161], // заменяем chains на optionalChains
+                        showQrModal: true,   // показываем QR-код
                         metadata: {
                             name: 'FluxSwap',
                             description: 'Swap interface',
@@ -508,7 +507,12 @@
                         }
                     });
 
-                    // Подписываемся на события
+                    // Если требуется дополнительная активация
+                    if (typeof wcProvider.enable === 'function') {
+                        await wcProvider.enable();
+                    }
+
+                    // События
                     wcProvider.on('chainChanged', () => {});
                     wcProvider.on('accountsChanged', (accounts) => {
                         if (accounts.length === 0) {
@@ -524,9 +528,6 @@
                         await forceClearSession();
                         updateConnectButton();
                     });
-
-                    // Активируем соединение (покажет QR-код)
-                    await wcProvider.enable();
 
                     const web3Provider = new ethers.providers.Web3Provider(wcProvider);
                     const signer_ = web3Provider.getSigner();

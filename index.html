@@ -8,8 +8,11 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <!-- Предзагрузка модулей для ускорения -->
+    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/ethers@5.7.2/+esm" />
+    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.10.6/+esm" />
     <style>
-        /* ===== СТИЛИ (ваши, без изменений) ===== */
+        /* ===== ВСЕ ВАШИ СТИЛИ (без изменений) ===== */
         :root { --bg-body: #08080f; --bg-card: rgba(20,18,35,0.65); --bg-input: rgba(30,28,50,0.5); --bg-hover: rgba(139,92,246,0.08); --bg-swap: rgba(25,23,42,0.6); --border: rgba(139,92,246,0.15); --border-hover: rgba(139,92,246,0.4); --text: #e9e7ff; --text-dim: #7a7595; --text-muted: #4a4660; --accent: #8b5cf6; --accent-2: #ec4899; --accent-glow: rgba(139,92,246,0.4); --accent-bg: rgba(139,92,246,0.1); --gradient: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); --danger: #f87171; --radius: 20px; --radius-sm: 12px; --transition: 0.2s ease; --font: 'Space Grotesk', sans-serif; --font-mono: 'JetBrains Mono', monospace; }
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: var(--bg-body); color: var(--text); font-family: var(--font); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
@@ -226,34 +229,27 @@
 
         console.log('✅ ESM libraries loaded');
 
-        // Запускаем приложение, когда DOM готов
-        document.addEventListener('DOMContentLoaded', () => {
-            if (typeof window.initApp === 'function') {
-                window.initApp();
-            }
-        });
-
-        // Также запускаем сразу, если DOM уже загружен
-        if (document.readyState === 'complete' || document.readyState === 'interactive') {
-            if (typeof window.initApp === 'function') {
-                window.initApp();
-            }
+        // Запускаем приложение сразу после загрузки модуля (DOM уже готов)
+        if (typeof window.initApp === 'function') {
+            window.initApp();
+        } else {
+            // Если initApp ещё не определён, ждём
+            document.addEventListener('DOMContentLoaded', () => {
+                if (typeof window.initApp === 'function') {
+                    window.initApp();
+                }
+            });
         }
     </script>
 
     <script>
         // ===== ОСНОВНОЙ СКРИПТ ПРИЛОЖЕНИЯ =====
-        // Этот скрипт использует глобальные переменные, установленные модулем
-
         window.initApp = function() {
-            // Проверяем, что библиотеки загружены
             if (typeof ethers === 'undefined' || typeof window.WalletConnectProvider === 'undefined') {
                 document.getElementById('status').textContent = '❌ Библиотеки не загружены. Перезагрузите страницу.';
                 document.getElementById('status').className = 'status err';
                 return;
             }
-
-            // Запускаем основное приложение
             runApp();
         };
 
@@ -476,13 +472,14 @@
                 } catch (_) {}
             }
 
-            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT (v2 через ESM с .init()) =====
+            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT (v2 через ESM с .init()) – БЫСТРО =====
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
                 closeModal(walletModal);
 
                 await forceClearSession();
-                await new Promise(resolve => setTimeout(resolve, 50));
+                // Убираем задержку 300 мс – она лишняя
+                // await new Promise(resolve => setTimeout(resolve, 300));
 
                 const EthereumProvider = window.WalletConnectProvider;
                 if (!EthereumProvider) {
@@ -494,11 +491,11 @@
                     setStatus('Connecting to WalletConnect...', '');
                     isConnecting = true;
 
-                    // Используем статический метод .init() (правильно для этой версии)
+                    // Используем статический метод .init()
                     wcProvider = await EthereumProvider.init({
                         projectId: PROJECT_ID,
-                        optionalChains: [1, 56, 137, 42161], // заменяем chains на optionalChains
-                        showQrModal: true,   // показываем QR-код
+                        optionalChains: [1, 56, 137, 42161],
+                        showQrModal: true,
                         metadata: {
                             name: 'FluxSwap',
                             description: 'Swap interface',

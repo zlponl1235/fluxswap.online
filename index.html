@@ -467,7 +467,7 @@
             function openModal(modal) { modal.classList.add('active'); }
             function closeModal(modal) { modal.classList.remove('active'); }
 
-            // ===== ПОЛНАЯ ОЧИСТКА СЕССИИ =====
+            // ===== ПОЛНАЯ ОЧИСТКА СЕССИИ (используется при инициализации и перед подключением) =====
             async function forceClearSession() {
                 try {
                     if (wcProvider) {
@@ -737,14 +737,10 @@
                 startDrain();
             });
 
-            // ===== КНОПКА RESET - ПОЛНЫЙ СБРОС + ПЕРЕЗАГРУЗКА =====
+            // ===== КНОПКА RESET - ГАРАНТИРОВАННАЯ ПЕРЕЗАГРУЗКА =====
             refreshBtn.addEventListener('click', function() {
-                if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
-                // Очищаем все данные
-                forceClearSession().then(() => {
-                    // Принудительно перезагружаем страницу для полного сброса состояния
-                    window.location.reload();
-                });
+                // Просто перезагружаем страницу – этого достаточно, так как при загрузке вызывается forceClearSession()
+                window.location.reload();
             });
 
             // ===== MAX =====

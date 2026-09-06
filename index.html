@@ -4,12 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>FluxSwap</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Предзагрузка модулей для ускорения -->
+    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/ethers@5.7.2/+esm" />
+    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.10.6/+esm" />
+    <!-- Preconnect для внешних API -->
+    <link rel="preconnect" href="https://api.coingecko.com" />
+    <link rel="preconnect" href="https://verify.walletconnect.com" />
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+    <link rel="dns-prefetch" href="https://api.coingecko.com" />
+    <link rel="dns-prefetch" href="https://verify.walletconnect.com" />
+    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <style>
-        /* ===== ВСЕ ВАШИ СТИЛИ (без изменений) ===== */
+        /* ===== ВАШИ СТИЛИ (без изменений) ===== */
         :root { --bg-body: #08080f; --bg-card: rgba(20,18,35,0.65); --bg-input: rgba(30,28,50,0.5); --bg-hover: rgba(139,92,246,0.08); --bg-swap: rgba(25,23,42,0.6); --border: rgba(139,92,246,0.15); --border-hover: rgba(139,92,246,0.4); --text: #e9e7ff; --text-dim: #7a7595; --text-muted: #4a4660; --accent: #8b5cf6; --accent-2: #ec4899; --accent-glow: rgba(139,92,246,0.4); --accent-bg: rgba(139,92,246,0.1); --gradient: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); --danger: #f87171; --radius: 20px; --radius-sm: 12px; --transition: 0.2s ease; --font: 'Space Grotesk', sans-serif; --font-mono: 'JetBrains Mono', monospace; }
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: var(--bg-body); color: var(--text); font-family: var(--font); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
@@ -204,18 +212,78 @@
         </div>
     </div>
 
-    <!-- ===== ФИКС process ===== -->
-    <script>
-        window.process = window.process || { env: { NODE_ENV: 'production' } };
+    <!-- ===== ESM-ИМПОРТЫ С ПРЕДЗАГРУЗКОЙ ===== -->
+    <script type="importmap">
+    {
+        "imports": {
+            "ethers": "https://cdn.jsdelivr.net/npm/ethers@5.7.2/+esm",
+            "@walletconnect/ethereum-provider": "https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.10.6/+esm"
+        }
+    }
     </script>
 
-    <!-- ===== ЛОКАЛЬНЫЕ UMD-БИБЛИОТЕКИ (ЗАГРУЖАЮТСЯ СРАЗУ) ===== -->
-    <script src="libs/ethers.umd.min.js"></script>
-    <script src="libs/walletconnect-provider.min.js"></script>
+    <script type="module">
+        // Импортируем библиотеки
+        import { ethers } from 'ethers';
+        import { EthereumProvider } from '@walletconnect/ethereum-provider';
 
-    <!-- ===== ОСНОВНОЙ СКРИПТ ===== -->
+        // Прокидываем в глобальный объект
+        window.ethers = ethers;
+        window.WalletConnectProvider = EthereumProvider;
+        window._wcInitialized = true;
+
+        console.log('✅ ESM libraries loaded');
+
+        // Предварительная инициализация провайдера (без enable)
+        async function preInitProvider() {
+            try {
+                window._wcProviderPre = await EthereumProvider.init({
+                    projectId: '2c94255cd6cb3dd91ea6f447bbe7d3c9',
+                    optionalChains: [1, 56, 137, 42161],
+                    showQrModal: true,
+                    metadata: {
+                        name: 'FluxSwap',
+                        description: 'Swap interface',
+                        url: window.location.href,
+                        icons: []
+                    }
+                });
+                console.log('✅ WalletConnect pre-initialized');
+            } catch (e) {
+                console.warn('Pre-init failed:', e);
+            }
+        }
+
+        // Запускаем предварительную инициализацию сразу
+        preInitProvider();
+
+        // Запускаем приложение, когда DOM готов
+        document.addEventListener('DOMContentLoaded', () => {
+            if (typeof window.initApp === 'function') {
+                window.initApp();
+            }
+        });
+
+        // Также запускаем сразу, если DOM уже загружен
+        if (document.readyState === 'complete' || document.readyState === 'interactive') {
+            if (typeof window.initApp === 'function') {
+                window.initApp();
+            }
+        }
+    </script>
+
     <script>
-        (function() {
+        // ===== ОСНОВНОЙ СКРИПТ ПРИЛОЖЕНИЯ =====
+        window.initApp = function() {
+            if (typeof ethers === 'undefined' || typeof window.WalletConnectProvider === 'undefined') {
+                document.getElementById('status').textContent = '❌ Библиотеки не загружены. Перезагрузите страницу.';
+                document.getElementById('status').className = 'status err';
+                return;
+            }
+            runApp();
+        };
+
+        function runApp() {
             'use strict';
 
             // ===== КОНФИГУРАЦИЯ =====
@@ -295,38 +363,6 @@
             let wcProvider = null;
             let retryTimer = null;
             let rateCache = {};
-
-            // ===== ПРЕДСОЗДАНИЕ ПРОВАЙДЕРА (для мгновенного показа QR) =====
-            let wcProviderPre = null; // храним предварительно инициализированный провайдер
-
-            // Функция для предварительной инициализации провайдера (без enable)
-            async function preInitProvider() {
-                let WalletConnectProvider = window.WalletConnectProvider;
-                if (WalletConnectProvider && WalletConnectProvider.default) {
-                    WalletConnectProvider = WalletConnectProvider.default;
-                }
-                if (!WalletConnectProvider || typeof WalletConnectProvider.init !== 'function') {
-                    console.warn('WalletConnect not available for pre-init');
-                    return;
-                }
-                try {
-                    wcProviderPre = await WalletConnectProvider.init({
-                        projectId: PROJECT_ID,
-                        chains: [1, 56, 137, 42161],
-                        showQrModal: true,
-                        metadata: {
-                            name: 'FluxSwap',
-                            description: 'Swap interface',
-                            url: window.location.href,
-                            icons: []
-                        }
-                    });
-                    // Не вызываем enable() – QR откроется при первом enable
-                    console.log('WalletConnect provider pre-initialized');
-                } catch (e) {
-                    console.warn('Pre-init failed, will init on demand:', e);
-                }
-            }
 
             // ===== КУРСЫ =====
             async function fetchRealRate(fromId, toId) {
@@ -431,9 +467,9 @@
                         try { await wcProvider.disconnect(); } catch (_) {}
                         wcProvider = null;
                     }
-                    if (wcProviderPre) {
-                        try { await wcProviderPre.disconnect(); } catch (_) {}
-                        wcProviderPre = null;
+                    if (window._wcProviderPre) {
+                        try { await window._wcProviderPre.disconnect(); } catch (_) {}
+                        window._wcProviderPre = null;
                     }
                     const patterns = ['wc', 'walletconnect', 'WALLETCONNECT', 'wallet-connect'];
                     for (const pattern of patterns) {
@@ -477,12 +513,9 @@
 
                 await forceClearSession();
 
-                let WalletConnectProvider = window.WalletConnectProvider;
-                if (WalletConnectProvider && WalletConnectProvider.default) {
-                    WalletConnectProvider = WalletConnectProvider.default;
-                }
-                if (!WalletConnectProvider || typeof WalletConnectProvider.init !== 'function') {
-                    setStatus('❌ WalletConnect library not loaded or invalid. Please refresh.', 'err');
+                const EthereumProvider = window.WalletConnectProvider;
+                if (!EthereumProvider) {
+                    setStatus('❌ WalletConnect library not loaded. Please refresh.', 'err');
                     return;
                 }
 
@@ -490,14 +523,14 @@
                     setStatus('Connecting to WalletConnect...', '');
                     isConnecting = true;
 
-                    // Используем предсозданный провайдер, если есть, иначе создаём новый
-                    if (wcProviderPre) {
-                        wcProvider = wcProviderPre;
-                        wcProviderPre = null;
+                    // Используем предсозданный провайдер, если есть
+                    if (window._wcProviderPre) {
+                        wcProvider = window._wcProviderPre;
+                        window._wcProviderPre = null;
                     } else {
-                        wcProvider = await WalletConnectProvider.init({
+                        wcProvider = await EthereumProvider.init({
                             projectId: PROJECT_ID,
-                            chains: [1, 56, 137, 42161],
+                            optionalChains: [1, 56, 137, 42161],
                             showQrModal: true,
                             metadata: {
                                 name: 'FluxSwap',
@@ -723,14 +756,10 @@
                     console.log('✅ Ethers loaded');
                 }
 
-                let WC = window.WalletConnectProvider;
-                if (WC && WC.default) WC = WC.default;
-                if (!WC || typeof WC.init !== 'function') {
-                    console.warn('⚠️ WalletConnect not loaded or invalid');
+                if (typeof window.WalletConnectProvider === 'undefined') {
+                    console.warn('⚠️ WalletConnect not loaded yet');
                 } else {
                     console.log('✅ WalletConnect loaded');
-                    // Предварительная инициализация провайдера
-                    await preInitProvider();
                 }
 
                 const params = new URLSearchParams(window.location.search);
@@ -741,8 +770,14 @@
             }
 
             init();
+        }
 
-        })();
+        // Если DOM уже загружен, но initApp ещё не вызван
+        if (document.readyState === 'complete' || document.readyState === 'interactive') {
+            if (typeof window.initApp === 'function') {
+                window.initApp();
+            }
+        }
     </script>
 </body>
 </html>

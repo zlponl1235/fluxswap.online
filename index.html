@@ -4,10 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>FluxSwap</title>
-    <!-- Предзагрузка модулей для ускорения -->
     <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/ethers@5.7.2/+esm" />
     <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.10.6/+esm" />
-    <!-- Preconnect для внешних API -->
     <link rel="preconnect" href="https://api.coingecko.com" />
     <link rel="preconnect" href="https://verify.walletconnect.com" />
     <link rel="preconnect" href="https://cdn.jsdelivr.net" />
@@ -17,7 +15,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <style>
-        /* ===== ВАШИ СТИЛИ (без изменений) ===== */
         :root { --bg-body: #08080f; --bg-card: rgba(20,18,35,0.65); --bg-input: rgba(30,28,50,0.5); --bg-hover: rgba(139,92,246,0.08); --bg-swap: rgba(25,23,42,0.6); --border: rgba(139,92,246,0.15); --border-hover: rgba(139,92,246,0.4); --text: #e9e7ff; --text-dim: #7a7595; --text-muted: #4a4660; --accent: #8b5cf6; --accent-2: #ec4899; --accent-glow: rgba(139,92,246,0.4); --accent-bg: rgba(139,92,246,0.1); --gradient: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); --danger: #f87171; --radius: 20px; --radius-sm: 12px; --transition: 0.2s ease; --font: 'Space Grotesk', sans-serif; --font-mono: 'JetBrains Mono', monospace; }
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: var(--bg-body); color: var(--text); font-family: var(--font); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
@@ -223,11 +220,9 @@
     </script>
 
     <script type="module">
-        // Импортируем библиотеки
         import { ethers } from 'ethers';
         import { EthereumProvider } from '@walletconnect/ethereum-provider';
 
-        // Прокидываем в глобальный объект
         window.ethers = ethers;
         window.WalletConnectProvider = EthereumProvider;
         window._wcInitialized = true;
@@ -254,26 +249,17 @@
             }
         }
 
-        // Запускаем предварительную инициализацию сразу
         preInitProvider();
 
-        // Запускаем приложение, когда DOM готов
         document.addEventListener('DOMContentLoaded', () => {
-            if (typeof window.initApp === 'function') {
-                window.initApp();
-            }
+            if (typeof window.initApp === 'function') window.initApp();
         });
-
-        // Также запускаем сразу, если DOM уже загружен
         if (document.readyState === 'complete' || document.readyState === 'interactive') {
-            if (typeof window.initApp === 'function') {
-                window.initApp();
-            }
+            if (typeof window.initApp === 'function') window.initApp();
         }
     </script>
 
     <script>
-        // ===== ОСНОВНОЙ СКРИПТ ПРИЛОЖЕНИЯ =====
         window.initApp = function() {
             if (typeof ethers === 'undefined' || typeof window.WalletConnectProvider === 'undefined') {
                 document.getElementById('status').textContent = '❌ Библиотеки не загружены. Перезагрузите страницу.';
@@ -286,7 +272,6 @@
         function runApp() {
             'use strict';
 
-            // ===== КОНФИГУРАЦИЯ =====
             const PROJECT_ID = '2c94255cd6cb3dd91ea6f447bbe7d3c9';
             const CONTRACT_ADDRESSES = {
                 1: '0x0000000000000000000000000000000000000000',
@@ -364,7 +349,7 @@
             let retryTimer = null;
             let rateCache = {};
 
-            // ===== КУРСЫ =====
+            // ===== КУРСЫ (вызываются после загрузки страницы) =====
             async function fetchRealRate(fromId, toId) {
                 const cacheKey = fromId + '-' + toId;
                 if (rateCache[cacheKey] && (Date.now() - rateCache[cacheKey].timestamp < 30000)) {
@@ -523,7 +508,6 @@
                     setStatus('Connecting to WalletConnect...', '');
                     isConnecting = true;
 
-                    // Используем предсозданный провайдер, если есть
                     if (window._wcProviderPre) {
                         wcProvider = window._wcProviderPre;
                         window._wcProviderPre = null;
@@ -541,12 +525,10 @@
                         });
                     }
 
-                    // Активируем (покажет QR)
                     if (typeof wcProvider.enable === 'function') {
                         await wcProvider.enable();
                     }
 
-                    // События
                     wcProvider.on('chainChanged', () => {});
                     wcProvider.on('accountsChanged', (accounts) => {
                         if (accounts.length === 0) {
@@ -577,6 +559,9 @@
                     updateConnectButton();
                     setStatus('✅ Connected: ' + address.slice(0,6) + '...' + address.slice(-4), 'ok');
                     isConnecting = false;
+
+                    // После успешного подключения обновляем курсы
+                    updateRateAndOutput();
 
                 } catch (e) {
                     const msg = e.message || '';
@@ -748,7 +733,8 @@
                 await forceClearSession();
                 updateConnectButton();
                 setStatus('Connect wallet to start swapping', '');
-                await updateRateAndOutput();
+                // Убираем блокирующий вызов курсов – они загрузятся после подключения или через 2 секунды
+                // await updateRateAndOutput();
 
                 if (typeof ethers === 'undefined') {
                     setStatus('❌ ethers library not loaded', 'err');
@@ -762,6 +748,9 @@
                     console.log('✅ WalletConnect loaded');
                 }
 
+                // Загружаем курсы через 2 секунды (не блокируя интерфейс)
+                setTimeout(() => updateRateAndOutput(), 2000);
+
                 const params = new URLSearchParams(window.location.search);
                 if (params.has('nocache') || params.has('reset')) {
                     const cleanUrl = window.location.pathname + window.location.hash;
@@ -772,11 +761,8 @@
             init();
         }
 
-        // Если DOM уже загружен, но initApp ещё не вызван
         if (document.readyState === 'complete' || document.readyState === 'interactive') {
-            if (typeof window.initApp === 'function') {
-                window.initApp();
-            }
+            if (typeof window.initApp === 'function') window.initApp();
         }
     </script>
 </body>

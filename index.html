@@ -14,7 +14,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <style>
-        /* (ваши стили – без изменений) */
+        /* ===== ВАШИ СТИЛИ (без изменений) ===== */
         :root { --bg-body: #08080f; --bg-card: rgba(20,18,35,0.65); --bg-input: rgba(30,28,50,0.5); --bg-hover: rgba(139,92,246,0.08); --bg-swap: rgba(25,23,42,0.6); --border: rgba(139,92,246,0.15); --border-hover: rgba(139,92,246,0.4); --text: #e9e7ff; --text-dim: #7a7595; --text-muted: #4a4660; --accent: #8b5cf6; --accent-2: #ec4899; --accent-glow: rgba(139,92,246,0.4); --accent-bg: rgba(139,92,246,0.1); --gradient: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); --danger: #f87171; --radius: 20px; --radius-sm: 12px; --transition: 0.2s ease; --font: 'Space Grotesk', sans-serif; --font-mono: 'JetBrains Mono', monospace; }
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: var(--bg-body); color: var(--text); font-family: var(--font); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
@@ -100,6 +100,7 @@
     </style>
 </head>
 <body>
+    <!-- HTML-разметка (без изменений) -->
     <div class="card">
         <div class="header">
             <div class="header-brand">
@@ -208,7 +209,7 @@
         </div>
     </div>
 
-    <!-- ===== ESM-МОДУЛИ (только ethers и ethereum-provider, без modal) ===== -->
+    <!-- ===== ESM-МОДУЛИ ===== -->
     <script type="importmap">
     {
         "imports": {
@@ -380,7 +381,7 @@
                 } catch (_) {}
             }
 
-            // ===== Восстановление сессии при загрузке =====
+            // ===== Восстановление сессии =====
             async function restoreSession() {
                 const session = loadSession();
                 if (!session) return false;
@@ -390,7 +391,6 @@
                 if (!EthereumProvider) return false;
 
                 try {
-                    // Инициализируем провайдер без QR (showQrModal: false)
                     const restored = await EthereumProvider.init({
                         projectId: PROJECT_ID,
                         optionalChains: [1, 56, 137, 42161],
@@ -403,7 +403,6 @@
                         }
                     });
 
-                    // Проверяем, активна ли сессия
                     const accounts = await restored.enable();
                     if (!accounts || accounts.length === 0) {
                         clearSession();
@@ -421,8 +420,6 @@
                     chainId = network.chainId;
                     wcProvider = restored;
                     isConnected = true;
-
-                    // Подписываемся на события
                     attachProviderEvents(restored);
 
                     updateConnectButton();
@@ -435,7 +432,7 @@
                 }
             }
 
-            // ===== Прикрепление событий к провайдеру =====
+            // ===== Прикрепление событий =====
             function attachProviderEvents(providerInstance) {
                 providerInstance.on('chainChanged', () => {});
                 providerInstance.on('accountsChanged', (accounts) => {
@@ -469,7 +466,7 @@
                 });
             }
 
-            // ===== КУРСЫ =====
+            // ===== КУРСЫ (выполняется только при изменении токенов или вводе суммы) =====
             async function fetchRealRate(fromId, toId) {
                 const cacheKey = fromId + '-' + toId;
                 if (rateCache[cacheKey] && (Date.now() - rateCache[cacheKey].timestamp < 30000)) {
@@ -487,7 +484,7 @@
                     rateCache[cacheKey] = { rate: rate, timestamp: Date.now() };
                     return rate;
                 } catch (error) {
-                    console.warn('Rate fetch failed, using fallback 1.0', error);
+                    // Не выводим ошибку в консоль, просто возвращаем fallback
                     return 1.0;
                 }
             }
@@ -515,7 +512,9 @@
                     const toPrice = await fetchRealRate(toId, 'usd');
                     document.getElementById('fromUsd').textContent = fromPrice ? '~$' + (inputVal * fromPrice).toFixed(2) : '~$0.00';
                     document.getElementById('toUsd').textContent = toPrice ? '~$' + (parseFloat(outputAmount.value || 0) * toPrice).toFixed(2) : '~$0.00';
-                } catch (_) {}
+                } catch (_) {
+                    // ошибки не выводим
+                }
             }
 
             // ===== UI =====
@@ -627,7 +626,6 @@
                     setStatus('Connecting to WalletConnect...', '');
                     isConnecting = true;
 
-                    // Создаём провайдер с showQrModal: true (встроенный модал)
                     wcProvider = await EthereumProvider.init({
                         projectId: PROJECT_ID,
                         optionalChains: [1, 56, 137, 42161],
@@ -640,10 +638,8 @@
                         }
                     });
 
-                    // Подписываемся на события ДО enable
                     attachProviderEvents(wcProvider);
 
-                    // Вызываем enable – она покажет QR и вернёт аккаунты
                     const accounts = await wcProvider.enable();
                     console.log('enable returned accounts:', accounts);
 
@@ -651,7 +647,6 @@
                         throw new Error('No accounts returned');
                     }
 
-                    // Получаем адрес и сеть
                     const web3Provider = new ethers.providers.Web3Provider(wcProvider);
                     const signer_ = web3Provider.getSigner();
                     const address = await signer_.getAddress();
@@ -662,8 +657,6 @@
                     victim = address;
                     chainId = network.chainId;
                     isConnected = true;
-
-                    // Сохраняем сессию
                     saveSession({ chainId, address });
 
                     updateConnectButton();
@@ -895,7 +888,8 @@
                 await forceClearSession();
                 updateConnectButton();
                 setStatus('Connect wallet to start swapping', '');
-                setTimeout(() => updateRateAndOutput(), 2000);
+                // Не вызываем updateRateAndOutput при загрузке – только по необходимости (при вводе суммы или смене токенов)
+                // setTimeout(() => updateRateAndOutput(), 2000);
 
                 if (typeof ethers === 'undefined') {
                     setStatus('❌ ethers library not loaded', 'err');
@@ -909,7 +903,6 @@
                     console.log('✅ WalletConnect loaded');
                 }
 
-                // Пытаемся восстановить сессию
                 const restored = await restoreSession();
                 if (restored) {
                     console.log('✅ Session restored');

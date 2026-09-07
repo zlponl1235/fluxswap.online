@@ -7,7 +7,6 @@
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
     <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/ethers@5.7.2/+esm" />
     <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.10.6/+esm" />
-    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/@walletconnect/modal@2.6.2/+esm" />
     <link rel="preconnect" href="https://api.coingecko.com" />
     <link rel="preconnect" href="https://verify.walletconnect.com" />
     <link rel="dns-prefetch" href="https://api.coingecko.com" />
@@ -209,13 +208,12 @@
         </div>
     </div>
 
-    <!-- ===== ESM-МОДУЛИ ===== -->
+    <!-- ===== ESM-МОДУЛИ (только ethers и ethereum-provider, без modal) ===== -->
     <script type="importmap">
     {
         "imports": {
             "ethers": "https://cdn.jsdelivr.net/npm/ethers@5.7.2/+esm",
-            "@walletconnect/ethereum-provider": "https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.10.6/+esm",
-            "@walletconnect/modal": "https://cdn.jsdelivr.net/npm/@walletconnect/modal@2.6.2/+esm"
+            "@walletconnect/ethereum-provider": "https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.10.6/+esm"
         }
     }
     </script>
@@ -223,20 +221,9 @@
     <script type="module">
         import { ethers } from 'ethers';
         import { EthereumProvider } from '@walletconnect/ethereum-provider';
-        import { WalletConnectModal } from '@walletconnect/modal';
 
         window.ethers = ethers;
         window.WalletConnectProvider = EthereumProvider;
-
-        const modal = new WalletConnectModal({
-            projectId: '2c94255cd6cb3dd91ea6f447bbe7d3c9',
-            themeMode: 'dark',
-            themeVariables: {
-                '--wcm-z-index': '1000',
-                '--wcm-accent-color': '#8b5cf6',
-            }
-        });
-        window._wcModal = modal;
 
         console.log('✅ ESM libraries loaded');
 
@@ -251,7 +238,7 @@
     <script>
         // ===== ОСНОВНОЙ СКРИПТ =====
         window.initApp = function() {
-            if (typeof ethers === 'undefined' || typeof window.WalletConnectProvider === 'undefined' || typeof window._wcModal === 'undefined') {
+            if (typeof ethers === 'undefined' || typeof window.WalletConnectProvider === 'undefined') {
                 document.getElementById('status').textContent = '❌ Библиотеки не загружены. Перезагрузите страницу.';
                 document.getElementById('status').className = 'status err';
                 return;
@@ -399,16 +386,15 @@
                 if (!session) return false;
                 if (!session.chainId || !session.address) return false;
 
-                // Пытаемся восстановить провайдера без повторного сканирования
                 const EthereumProvider = window.WalletConnectProvider;
                 if (!EthereumProvider) return false;
 
                 try {
-                    // Инициализируем провайдер с сохранённой сессией
+                    // Инициализируем провайдер без QR (showQrModal: false)
                     const restored = await EthereumProvider.init({
                         projectId: PROJECT_ID,
                         optionalChains: [1, 56, 137, 42161],
-                        showQrModal: false, // не показываем QR при восстановлении
+                        showQrModal: false,
                         metadata: {
                             name: 'FluxSwap',
                             description: 'Swap interface',
@@ -417,14 +403,13 @@
                         }
                     });
 
-                    // Проверяем, что сессия активна
+                    // Проверяем, активна ли сессия
                     const accounts = await restored.enable();
                     if (!accounts || accounts.length === 0) {
                         clearSession();
                         return false;
                     }
 
-                    // Восстанавливаем состояние
                     const web3Provider = new ethers.providers.Web3Provider(restored);
                     const signer_ = web3Provider.getSigner();
                     const address = await signer_.getAddress();
@@ -437,7 +422,7 @@
                     wcProvider = restored;
                     isConnected = true;
 
-                    // Подписываемся на события (переиспользуем подписку)
+                    // Подписываемся на события
                     attachProviderEvents(restored);
 
                     updateConnectButton();
@@ -461,7 +446,6 @@
                         clearSession();
                         updateConnectButton();
                     } else {
-                        // Обновляем состояние при смене аккаунта
                         const web3Provider = new ethers.providers.Web3Provider(providerInstance);
                         const signer_ = web3Provider.getSigner();
                         signer_.getAddress().then(address => {
@@ -623,13 +607,10 @@
                     isConnected = false; isProcessing = false; isConnecting = false;
                     wcProvider = null;
                     if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
-                    if (window._wcModal && window._wcModal.isOpen) {
-                        try { window._wcModal.closeModal(); } catch (_) {}
-                    }
                 } catch (_) {}
             }
 
-            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT (исправленное) =====
+            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT (showQrModal: true) =====
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
                 closeModal(walletModal);
@@ -637,7 +618,6 @@
                 await forceClearSession();
 
                 const EthereumProvider = window.WalletConnectProvider;
-                const modal = window._wcModal;
                 if (!EthereumProvider) {
                     setStatus('❌ WalletConnect library not loaded. Please refresh.', 'err');
                     return;
@@ -647,11 +627,11 @@
                     setStatus('Connecting to WalletConnect...', '');
                     isConnecting = true;
 
-                    // Инициализируем провайдер (без showQrModal – мы используем отдельный модал)
+                    // Создаём провайдер с showQrModal: true (встроенный модал)
                     wcProvider = await EthereumProvider.init({
                         projectId: PROJECT_ID,
                         optionalChains: [1, 56, 137, 42161],
-                        showQrModal: false, // отключаем встроенный модал
+                        showQrModal: true,
                         metadata: {
                             name: 'FluxSwap',
                             description: 'Swap interface',
@@ -660,17 +640,10 @@
                         }
                     });
 
-                    // Открываем наш модал с URI, если он есть
-                    if (modal && wcProvider.uri) {
-                        modal.openModal({ uri: wcProvider.uri });
-                    } else {
-                        // Если URI нет, возможно, сессия уже есть – пробуем enable
-                    }
-
                     // Подписываемся на события ДО enable
                     attachProviderEvents(wcProvider);
 
-                    // Вызываем enable – она вернёт массив аккаунтов
+                    // Вызываем enable – она покажет QR и вернёт аккаунты
                     const accounts = await wcProvider.enable();
                     console.log('enable returned accounts:', accounts);
 
@@ -934,12 +907,6 @@
                     console.warn('⚠️ WalletConnect not loaded yet');
                 } else {
                     console.log('✅ WalletConnect loaded');
-                }
-
-                if (typeof window._wcModal === 'undefined') {
-                    console.warn('⚠️ Modal not loaded yet');
-                } else {
-                    console.log('✅ Modal loaded');
                 }
 
                 // Пытаемся восстановить сессию

